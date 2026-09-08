@@ -143,3 +143,23 @@ For a short pipeline check rather than a full run, set `ROWS_SCALE` and
 `EPOCHS`, e.g. `ROWS_SCALE=0.01 EPOCHS=3`. Training reads only the data
 bundled under `data/`. See `PROVENANCE.md` for the exact row allocation and
 checkpoint lineage behind the shipped model.
+
+## Citation
+
+<!-- TODO: replace with the final arXiv identifier and author list once posted. -->
+
+If you use `flumen` in your research, please cite:
+
+```bibtex
+@article{flumen2026,
+  author  = {TODO: author list},
+  title   = {TODO: paper title},
+  journal = {arXiv preprint arXiv:XXXX.XXXXX},
+  year    = {2026},
+  eprint  = {XXXX.XXXXX},
+  archivePrefix = {arXiv},
+  primaryClass  = {astro-ph.CO}
+}
+```
+
+The underlying Monte-Carlo lensing simulator is described in Vaskonen (2026).
