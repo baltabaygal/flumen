@@ -1,0 +1,54 @@
+{
+  "patch_date": "2026-09-07",
+  "status": "applied_to_frozen_bundle",
+  "authorship": "implemented by a peer interactive session (gw-wl-emulator-1f), which stopped mid-flow on a usage limit after the first (uncapped) qualification run; the cap fix, re-verification, and documentation below were completed by this session (gw-wl-emulator-47) at the user's request to continue",
+  "scope": "model/flux.py (new), model/composite.py, model/api.py, evaluation/test_model.py, evaluation/test_unit_flux.py -- no checkpoint changed",
+  "checkpoints_unchanged": {
+    "boundary_body.pt": "1a8a07f9deb6937fa47fd98bb9bc3303b1aad4e8265dd35796735dbec2ef4df3",
+    "asymmetric_body_sl0p6.pt": "fc88382c50b9a6d04bf28e2b3efa033afad5843872719f4ef0380e6f3581df19"
+  },
+  "backup_of_pre_patch_bundle": "backups/pre_unit_flux_2026-09-07/",
+  "summary": {
+    "what": "default flux calibration switched from a finite-grid trapezoid integral with a hard-capped shift ('legacy') to a Gauss-Legendre quadrature (geometric panels near the exact body support boundary, refined until mass/inverse-moment agree to 2e-6) enforcing <1/mu>=1 exactly ('unit', new default)",
+    "why": "more accurate normalization/flux integral than the old finite-range trapezoid grid; removes the historical GRID_HI=ln(400) truncation",
+    "api": "load_model(flux_mode='unit'|'legacy'), default 'unit'; make_composite(..., flux_mode=...) same"
+  },
+  "first_version_regression_and_fix": {
+    "first_version": "no cap on the unit-flux shift -- flux.unit_flux_context's own docstring said so explicitly",
+    "regression_found": {
+      "method": "973-context untouched test-set qualification (experiments/unit_flux_implementation_2026-09-07/qualify.py), comparing kl_legacy vs kl_unit per context",
+      "aggregate": {
+        "kl_unit_p90_vs_legacy": "2.8x worse",
+        "kl_unit_p99_vs_legacy": "21.7x worse",
+        "kl_unit_max_vs_legacy": "13x worse",
+        "kl_unit_median_vs_legacy": "essentially unchanged (0.002217 vs 0.002205)"
+      },
+      "by_z_band": {
+        "z_0_to_8": "kl_unit ~= kl_legacy (identical to 3-4 decimals) across 877/973 contexts",
+        "z_8_to_13": "kl_unit_median 0.01596 vs kl_legacy_median 0.00331 -- ~5x worse, n=96"
+      },
+      "root_cause": "correlation(|shift|, kl_unit) = 0.974 across all 973 contexts, vs correlation(z, kl_unit) = 0.47 -- shift MAGNITUDE is the real driver, not z per se (confirmed: at least one z=6.79 context with a large shift shows the same blowup). Every one of the worst-affected contexts had the LEGACY shift already saturated at its own -0.05 cap, i.e. this is direct evidence the historical cap was a genuine, load-bearing trust region, not conservative slack to relax.",
+      "raw_qualification_data": "test_metrics_UNCAPPED_2026-09-07.csv, qualification_run_UNCAPPED_2026-09-07.log (preserved for the record)"
+    },
+    "fix": "composite.py's context() now clips the unit-flux shift to the SAME FLUX_DELTA_MAX=0.05 the legacy path already used, identically applied (float(np.clip(delta, -FLUX_DELTA_MAX, FLUX_DELTA_MAX))). The more accurate Gauss-Legendre quadrature itself is unchanged and kept for every context -- only the size of the correction it's allowed to apply is now bounded. flux.unit_flux_context itself is left uncapped and documented as such, so it remains a general-purpose 'what would exact unit flux require here' utility independent of this policy choice.",
+    "cap_calibration_evidence": "binned by |shift|: (0,0.05] -> 865/973 contexts, kl_unit==kl_legacy to 4 decimals; (0.05,0.1] -> kl_unit already 2.5x kl_legacy's own median in that bin; degradation grows monotonically past that point. The pre-existing 0.05 value (unchanged from the legacy path, not re-tuned) is already well-calibrated -- 89% of the test set never reaches it."
+  },
+  "post_fix_verification": {
+    "spot_check": "5 worst-affected contexts from the uncapped run (production_data:{80,376,596,790,949}, z in [10.2,11.6]) re-checked directly: all now have delta clipped to exactly -0.0500 and KL_unit == KL_legacy to 4 decimals",
+    "full_requalification": {
+      "contexts": 973,
+      "kl_legacy": {"median": 0.002204980544497067, "p90": 0.0045110792756339595, "p99": 0.012210645417563152, "max": 0.030608001939130575},
+      "kl_unit_capped": {"median": 0.002205970964150005, "p90": 0.00452213902286171, "p99": 0.012240463178890394, "max": 0.0306080019391305},
+      "shift_range": {"min": -0.05, "max": 0.00922080690594547},
+      "contexts_where_cap_binds": 108,
+      "by_z_band_8_to_13": {"kl_legacy_median": 0.003306891568622815, "kl_unit_capped_median": 0.003307321608388495},
+      "raw_data": "test_metrics.csv (post-fix, current), qualification_run.log via requalify_after_cap.log"
+    },
+    "pytest": "24/24 pass (production_model/evaluation), including a new test_extreme_context_is_capped_not_exact replacing the original test's now-incorrect assumption that z=10.43 achieves exact unit flux"
+  },
+  "not_claimed": [
+    "the 108 capped contexts do NOT have exact unit flux -- this is deliberate, not a residual bug",
+    "this does not address the pre-existing (unrelated) monotonicity violations documented in PROVENANCE.md's 2026-09-07 tail-anchor-correction section, found independently the same day",
+    "the peer session's own next stated direction -- a smooth body-reshaping correction as an alternative to a pure moment/translation correction, motivated by exactly this same high-z/high-structure corner -- was not started here; this patch only fixes the immediate regression in what was already implemented"
+  ]
+}

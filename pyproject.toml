@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flumen"
+version = "0.1.0"
+description = "Fast Lensing Unified Magnification Emulator with Normalizing flows -- a conditional GW weak-lensing magnification PDF emulator"
+requires-python = ">=3.12"
+dependencies = ["numpy==2.4.3", "torch==2.6.0", "zuko==1.6.0", "h5py==3.16.0"]
+
+[project.optional-dependencies]
+plots = ["matplotlib==3.10.9", "seaborn==0.13.2", "pandas==3.0.3"]
+
+[tool.setuptools]
+packages = ["flumen", "flumen.model", "flumen.training", "flumen.evaluation"]
+package-dir = {flumen = "."}
+
+[tool.setuptools.package-data]
+"flumen.model" = ["checkpoints/*.pt", "calibration/*.json"]

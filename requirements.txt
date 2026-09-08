@@ -1,0 +1,8 @@
+numpy==2.4.3
+torch==2.6.0
+zuko==1.6.0
+h5py==3.16.0
+pytest==9.0.3
+matplotlib==3.10.9
+seaborn==0.13.2
+pandas==3.0.3

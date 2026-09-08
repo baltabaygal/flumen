@@ -1,0 +1,49 @@
+{
+  "patch_date": "2026-09-07",
+  "status": "correction_disabled_code_retained",
+  "authorship": "the round-3 tail-anchor correction was built and shipped earlier the same day by this session (gw-wl-emulator-47); this record covers the same-day revert, triggered by the user asking for direct evidence ('show me the plots... does it fail... or works in all range?') that had not yet been produced",
+  "scope": "model/composite.py (TAIL_ANCHOR_CORRECTION_ENABLED True->False), evaluation/test_model.py (golden lists swapped to match) -- model/tail.py's pot_tail_logp_corrected is UNCHANGED and UNUSED while the flag is False; no checkpoint changed",
+  "checkpoints_unchanged": {
+    "boundary_body.pt": "1a8a07f9deb6937fa47fd98bb9bc3303b1aad4e8265dd35796735dbec2ef4df3",
+    "asymmetric_body_sl0p6.pt": "fc88382c50b9a6d04bf28e2b3efa033afad5843872719f4ef0380e6f3581df19"
+  },
+  "backup_of_pre_round3_bundle": "backups/pre_tail_anchor_fix_2026-09-07/ (composite.py + tail.py as they were before round 3 shipped -- restoring from this backup and simply flipping the flag both reach the same behavior, since round 3's code is architecturally a no-op when the flag is False)",
+  "summary": {
+    "what": "TAIL_ANCHOR_CORRECTION_ENABLED reverted True -> False in composite.py. Round-3's code (tail.py's pot_tail_logp_corrected, the ramp_lo plumbing in composite.unnormalized) is KEPT, not deleted, as a documented starting point for a future attempt.",
+    "why": "the correction was verified SAFE (no new monotonicity violations, per the original round-3 differential check) but a follow-up check against the audit's own target metric found it ineffective-to-counterproductive there -- see evidence below. Shipping a correction that does not accomplish its stated purpose, with documentation claiming it does, is worse than shipping nothing and documenting the defect as open."
+  },
+  "root_cause_of_ineffectiveness": {
+    "mechanism_1_underdelivery": "the min_safe_width=3.0 ramp-width floor (tail.py, added specifically to survive round 1/2's monotonicity failures) makes the correction's compact_switch ramp much wider than the distance from the body/tail crossing to mu=8. Measured directly (compact_switch evaluated at x=ln(8) using the exact ramp bounds the production code computes): at Planck-like z=0.4-1.0 only 17.2% of the intended survival-anchor correction is delivered AT mu=8 itself, decaying to 0.2% by z=3 and 0.0% by z>=4. A 200-point random sample spanning the FULL confirmed training box (z in [0.4,2.5], theta LHS over TRAINING_RANGE) read median/mean/max = 0.0% delivered at mu=8 -- the Planck numbers were the optimistic case.",
+    "mechanism_2_wrong_direction": "confirmed by direct log-density evaluation (not inferred from the switch fraction alone): a smooth switch-based survival boost must transiently SUPPRESS density while ramping up, because the hazard/slope term is reduced (via -correction_deriv, itself >=0) before the survival term's boost (via +correction) has grown large enough to compensate. At Planck z=0.5 the corrected/original density ratio is 0.978 AT mu=8, dips further to ~0.977 shortly after, and only crosses back above 1.0 around mu~17-18 -- see round3_density_ratio.png. Since the tail falls off steeply, the suppressed sub-range (mu=8 to ~17-20) holds most of the mass of the audited [8,30) window, so integrating over that window nets a DECREASE despite the correction's intent to increase it there."
+  },
+  "verification": {
+    "method": "re-used the already-computed 1747-row per-context dataset from this session's earlier verification pass (production_data validation+test contexts, ~20k rays/context), filtered to the audit's own scope (z in [0.4,2.5], matching experiments/shoulder_tail_audit_2026-09-07/audit.py exactly) to get a like-for-like comparison against the audit's originally-reported ~1.15-1.16 ratio",
+    "n_contexts_in_audit_scope": 845,
+    "pooled_ratio_sim_exceedances_over_model_mass_8_to_30": {
+      "before_correction": 1.1459593203722260,
+      "after_correction": 1.1583354933361200,
+      "interpretation": "1.0 = perfect match; >1.0 = model under-predicts (matches the audit's original ~1.15-1.16 finding for BEFORE, confirming scope alignment). AFTER is HIGHER than BEFORE = worse, not the intended fix."
+    },
+    "per_context_mass_change_8_to_30_window": {
+      "n_contexts_with_measurable_change": 845,
+      "n_mass_decreased": 758,
+      "n_mass_increased": 0,
+      "n_flat": 87,
+      "median_relative_change": "-0.888%",
+      "note": "zero out of 845 contexts had the correction move the predicted mass in the intended (increasing) direction"
+    },
+    "planck_visual_check": "at Planck cosmology the effect is invisible against MC sampling noise at both 200k (z=0.5,1.0) and 600k (z=1.5,2.0, combining this session's rays with the audit's own fresh 400k) rays -- consistent with the effect being a genuine few-percent shift, well under single-cosmology MC noise in a sparse deep-tail region. The deterministic density-ratio plot (no MC needed) is the decisive evidence, not the histogram overlay.",
+    "safety_recheck": "NOT repeated in this pass -- the original round-3 differential safety verification (400-context check, zero new monotonicity violations) is unaffected by this finding and still stands as the record of why the correction is SAFE. This patch is about EFFECTIVENESS, a separate question.",
+    "plots": ["round3_before_after_verdict.png", "round3_density_ratio.png"],
+    "reproduction_script": "experiments/tail_anchor_fix_attempt_2026-09-07/verify_round3_effect.py"
+  },
+  "post_revert_verification": {
+    "pytest": "24/24 pass (production_model/evaluation), including a new test_golden_log_density_with_tail_anchor_correction_opt_in that guards the disabled code path still reproduces its exact round-3 values when explicitly re-enabled",
+    "manifest": "ARTIFACTS.sha256 re-verified clean (shasum -a 256 -c) after re-hashing composite.py and evaluation/test_model.py"
+  },
+  "not_claimed": [
+    "that the underlying 8<=mu<30 under-prediction (~15-16%, the audit's original finding) is fixed -- it is explicitly NOT fixed, and is restored to MODEL_CARD.md's 'Known limitations' list",
+    "that round 3's code is unsafe -- the original differential monotonicity check is untouched by this finding and still supports the safety claim; only the effectiveness claim is withdrawn",
+    "that a future, less conservative ramp design could not succeed where this one did not -- the architectural guarantee (crossing search provably unaffected) and the adaptive-safety-width derivation method both remain valid, reusable groundwork"
+  ]
+}

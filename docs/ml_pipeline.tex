@@ -1,0 +1,686 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{empheq}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\vect}[1]{\boldsymbol{#1}}
+
+\title{The magnification-PDF emulator: an equation-level pipeline note}
+\author{\texttt{gw-wl-emulator/production\_model}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\noindent\textit{Verified in this session against \code{gw-wl-emulator} commit
+\code{fcd795b} (2026-09-04), by reading the shipped
+\code{production\_model/} package directly (not the exploratory
+\code{gw-wl-emulator-ar} research tree) and by loading the two frozen
+checkpoints to confirm their recorded hyperparameters. Numbers quoted below
+come from files under \code{production\_model/evaluation/results/},
+\code{production\_model/model/calibration/}, and
+\code{production\_model/PROVENANCE.md} in that same commit. A later retrain
+or a different checkpoint pairing will not automatically match this note.}
+
+\begin{abstract}
+This note documents, equation by equation, what the shipped magnification-PDF
+emulator (\code{production\_model/}) actually computes, and why, for a reader
+who is not an ML specialist. The paper's Sec.~III (``Machine learning'')
+states the model in prose; this note walks the same object through the
+actual code, stage by stage, so that every symbol in the paper can be traced
+to a specific file and line. The object this whole pipeline exists to
+produce is a single number: $\log p(\ln\mu \mid z_s, \vect\Theta)$, the
+conditional log-density of the weak-lensing magnification, evaluated in
+milliseconds instead of requiring a fresh Monte Carlo run of the C++ engine
+documented in the paper's Sec.~II.
+\end{abstract}
+
+\tableofcontents
+
+\section{What problem this solves, and the shape of the answer}
+
+The physics engine (\file{cpp/lensing.cpp} and friends, documented
+separately in the paper's Sec.~II) produces samples of the magnification
+$\mu$ by ray-tracing through a simulated matter field. Given a source
+redshift $z_s$ and six cosmological parameters
+$\vect\Theta = (h,\Omega_M,\sigma_8,\Omega_B,n_s,z_{\rm eq})$, it can generate
+as many Monte Carlo rays as you like, but each ray costs real compute, and a
+cosmological parameter scan (an MCMC chain, say) needs the density evaluated
+at thousands of different $(z_s,\vect\Theta)$ points. Running the simulator
+fresh at every point is not feasible.
+
+The emulator's job is therefore to be a fast stand-in function
+\[
+ (\ln\mu,\, z_s,\, \vect\Theta) \;\longmapsto\; \log p_I(\ln\mu \mid z_s,\vect\Theta)
+\]
+that agrees with what the simulator \emph{would have produced}, everywhere
+inside a calibrated domain, without requiring new ray-tracing. ``Emulator''
+here does not mean a regression that predicts one or two summary numbers
+(like a mean or a variance) — it means a full, continuous, normalized
+probability density over $\ln\mu$ at any queried context. This matters
+downstream: a likelihood needs the whole shape, not just a couple of
+moments.
+
+The code is organized as a short pipeline of independent stages, each
+implemented in its own file under \file{production\_model/model/}, chained
+together by \file{model/api.py}:
+\begin{enumerate}
+ \item \textbf{Standardize the coordinate} (\file{scale.py}) — because the
+   width of the distribution varies enormously with context, everything
+   downstream works in a rescaled coordinate, not raw $\ln\mu$.
+ \item \textbf{Two learned ``bodies''} (\file{boundary\_body.py},
+   \file{hybrid\_body.py}) — neural density models (normalizing flows) that
+   cover the well-sampled bulk of the distribution.
+ \item \textbf{A calibrated tail} (\file{tail.py}) — a hand-fit physical
+   model for the rare high-magnification events the flows cannot learn from
+   too few examples.
+ \item \textbf{The composite} (\file{composite.py}) — splices body and tail
+   into one density, renormalizes it, and applies a small physically
+   motivated correction.
+\end{enumerate}
+Section~\ref{sec:results} closes with how this final object is checked
+against held-out simulator data.
+
+\section{Training data and the seven-number context}
+\label{sec:data}
+
+\subsection{What ``training data'' means here}
+
+Unlike an image classifier, this model is not trained on labelled examples
+of $(\text{input}, \text{correct output})$ pairs — a probability density has
+no single ``correct value'' to regress against. Instead, the flow (defined
+in Sec.~\ref{sec:body}) is trained by \emph{maximum likelihood}: for every
+context $(z_s,\vect\Theta)$ in the training set, the simulator has already
+produced a large batch of Monte Carlo magnification rays sampled from the
+\emph{true} conditional density; training adjusts the flow's internal
+parameters so that those observed rays become as probable as possible under
+the flow's own predicted density. A density that matches the data well
+assigns those rays high probability; a bad density assigns them low
+probability. This is the standard way to fit a density model when you have
+samples rather than labels.
+
+\subsection{The bundled dataset}
+
+Per \file{production\_model/data/README.md} and
+\file{production\_model/PROVENANCE.md} (verified against the same files in
+this session):
+
+\begin{itemize}
+ \item A base run of \textbf{2{,}055 training / 972 validation / 973
+   untouched test} configurations, containing 41{,}006{,}144 /
+   19{,}389{,}180 / 19{,}406{,}954 magnification rays respectively. ``Test''
+   here means a checkerboard split held out from every stage of fitting —
+   the number quoted for generalization at the end of this note comes only
+   from that set.
+ \item Two \textbf{low-structure augmentation} runs adding 718 more training
+   configurations (14{,}359{,}792 rays), added because the narrowest,
+   most-peaked low-redshift/low-structure distributions were under-resolved
+   by the base sample alone.
+ \item A \textbf{high-structure, high-redshift augmentation} of 240 training
+   configurations (4{,}664{,}309 rays, plus 48 heldout configurations not
+   used in fitting anything), added because the base sample under-resolves
+   the lower flank of the broadest, most extreme distributions.
+\end{itemize}
+
+Each ray is drawn under \code{PRODUCTION\_CONFIG} — the full paper-default
+physics (subhalo model 5, the $\sigma_8$ top-hat anchor, the correlated bias
+field, filament bias, etc.; see the paper's Sec.~II and CLAUDE.md for that
+pinning) — so the emulator is trained on exactly the physics the paper's
+Monte Carlo sections describe, not some cheaper placeholder.
+
+\subsection{The calibrated domain}
+
+The seven numbers that specify a context are, in the code's own fixed
+ordering (\file{model/api.py}, docstring of \code{MagnificationPDF}):
+\[
+ \vect c = (z_s,\, h,\, \Omega_M,\, \sigma_8,\, \Omega_B,\, n_s,\, z_{\rm
+ eq}/1000).
+\]
+Dividing $z_{\rm eq}$ by 1000 is purely a numerical-conditioning choice (it
+keeps all seven numbers on comparable scales for the neural network) — it
+carries no physics. Table~\ref{tab:domain} gives the box actually covered by
+the bundled data (\file{production\_model/data/README.md}); predictions
+outside it are unvalidated extrapolations and are excluded from every
+accuracy number quoted later.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrr}
+\toprule
+input & minimum & maximum \\
+\midrule
+$z_s$ & 0.2 & 11.993 \\
+$h$ & 0.55 & 0.800 \\
+$\Omega_M$ & 0.15 & 0.500 \\
+$\sigma_8$ & 0.40 & 1.500 \\
+$\Omega_B$ & 0.030 & 0.070 \\
+$n_s$ & 0.940 & 0.990 \\
+$z_{\rm eq}/1000$ & 3.300 & 3.500 \\
+\bottomrule
+\end{tabular}
+\caption{The calibrated domain, from \file{production\_model/data/README.md}.}
+\label{tab:domain}
+\end{table}
+
+\section{Stage 1: a context-dependent coordinate change}
+\label{sec:scale}
+
+\subsection{Why raw $\ln\mu$ does not work}
+
+The single largest lever in this whole project, and the reason the pipeline
+has this stage at all, is a plain empirical fact: the \emph{width} of
+$p(\ln\mu\mid \vect c)$ — how spread-out the distribution is — changes by
+roughly a factor of $200$ across the calibrated domain. A low-redshift,
+low-structure context gives an extremely narrow, sharply peaked
+distribution; a high-redshift, high-structure context gives a very broad
+one. If you standardized $\ln\mu$ with one single mean and one single
+spread for the whole training set (the naive approach), the narrow
+distributions would collapse into a sliver a fraction of a percent wide on
+that shared axis — the neural network would simply never see them resolved,
+no matter how much data it was given. The fix is to make the standardization
+itself a function of context.
+
+\subsection{The coordinate}
+
+Define
+\begin{equation}
+ y = \frac{\ln\mu - m(\vect c)}{s(\vect c)},
+ \label{eq:ystd}
+\end{equation}
+where $m(\vect c)$ (a robust location, like a median) and $s(\vect c)$ (a
+robust scale, like half the 68\% interval) are smooth, closed-form
+regressions fit once, ahead of any neural-network training, directly on the
+Monte Carlo samples described in Sec.~\ref{sec:data}. Every subsequent stage
+of the pipeline — the flows, the edge location, the tail — is expressed in
+terms of $y$, not raw $\ln\mu$, precisely so that one trained model can
+resolve both the narrowest and the broadest distributions in the domain at
+once.
+
+\textbf{Implementation.} \file{model/scale.py::loc\_scale} computes
+\begin{align}
+ \log s(\vect c) &= \vect x(\vect c)^{\!\top}\vect\beta_{\log s}, \\
+ m(\vect c) &= s(\vect c)\cdot \vect x(\vect c)^{\!\top}\vect\beta_{m},
+\end{align}
+where $\vect x(\vect c)$ is a fixed, hand-chosen feature vector (not learned
+by gradient descent — it is a linear ridge fit) built by
+\file{model/features.py::scale\_features}: a degree-4 polynomial in $\ln
+z_s$, plus $\ln\sigma_8,\ln\Omega_M,\ln h,\Omega_B,n_s,z_{\rm eq}$, plus
+cross terms with $\ln z_s$ and $\ln z_s^2$ (19 features total, standardized
+by their own training-set mean/std before the dot product). The
+coefficients $\vect\beta_{\log s},\vect\beta_m$ are stored in the checkpoint
+(\code{stats["scale\_fit"]}) — they are frozen numbers baked in at fit time,
+not something the flow adjusts during its own training.
+
+\textbf{Why this functional form.} $\ln s$, not $s$ itself, is what is
+regressed, guaranteeing $s>0$ for any input (an exponential of anything is
+positive) without a constrained optimizer. $m$ is fit as $s$ times a
+separate regression rather than independently, which keeps the location
+estimate naturally tied to the local width rather than letting the two
+drift apart in an unphysical way. The specific basis — a low-order
+polynomial in $\log z_s$ together with logs of the amplitude-like
+parameters $\sigma_8,\Omega_M,h$ — was chosen empirically because
+$\sigma(\ln\mu)$ is known (from the analytic theory referenced in the
+paper's Sec.~II and CLAUDE.md's \code{sigma\_full\_analytic\_note.md}) to
+grow like $z_s^{3/2}$ at low redshift and to be roughly a power of $\sigma_8$
+at fixed redshift; a basis built from those variables' logs fits this shape
+far better (measured: $\sim 3\%$ held-out relative error, flat across
+redshift) than the same regression built on the low-redshift-only edge
+feature basis of Sec.~\ref{sec:body} ($\sim15\%$, and worse per band).
+
+Because $y$ is a rescaling of $\ln\mu$, densities transform with a Jacobian:
+if $p_y(y\mid\vect c)$ is the density the flow predicts in $y$-space, the
+density in $\ln\mu$-space is
+\begin{equation}
+ p_x(\ln\mu\mid\vect c) = \frac{1}{s(\vect c)}\, p_y(y\mid\vect c),
+ \label{eq:ln-jacobian}
+\end{equation}
+and, converting once more from $\ln\mu$ to $\mu$ itself,
+\begin{equation}
+ p_I(\mu\mid\vect c) = \frac{p_x(\ln\mu\mid\vect c)}{\mu}.
+ \label{eq:mu-jacobian}
+\end{equation}
+Both factors of $1/s$ and $1/\mu$ appear explicitly in the code (e.g.
+\file{model/boundary\_body.py:56}, \file{model/api.py:30}) — they are not
+optional; forgetting either would silently misnormalize the density.
+
+\section{Stage 2: normalizing-flow bodies}
+\label{sec:body}
+
+\subsection{What a normalizing flow is, briefly}
+
+A normalizing flow is a way of building a flexible, trainable probability
+density out of a simple one. Start with an easy reference density (here, a
+Normal distribution, or a variant of it) over an internal variable, then
+pass it through an invertible, differentiable transformation
+$T_{\vect c}$ — invertible so that probability is conserved, and depending
+on the context $\vect c$ so the shape can change with $z_s$ and cosmology.
+The change-of-variables formula for densities,
+\begin{equation}
+ p(y) = p_{\rm base}\!\big(T_{\vect c}^{-1}(y)\big)\, \left|\frac{d
+ T_{\vect c}^{-1}}{dy}\right|,
+ \label{eq:cov}
+\end{equation}
+converts a density on the simple reference variable into a density on $y$.
+Training a flow means adjusting the parameters of $T_{\vect c}$ (via a
+neural network, the ``conditioner'') so that Eq.~\ref{eq:cov} assigns high
+probability to the training rays. This is the general recipe; the specific
+transform used here is described next.
+
+\subsection{The transform: sum-of-squares polynomial flows (SOSPF)}
+
+The transform $T_{\vect c}$ is built by a \emph{sum-of-squares polynomial
+flow} \cite{jaini2019sum}: its derivative $dT_{\vect c}/du$ is constructed
+as a sum of squares of low-degree polynomials (plus a small positive
+constant), which is automatically non-negative everywhere, and integrating
+a non-negative function always gives a monotonically increasing one — so
+$T_{\vect c}$ is guaranteed invertible by construction, with no separate
+constraint needed. Compared to the more common spline-based flows, this
+gives a smooth, everywhere-infinitely-differentiable transport with no
+knot points, which matters here because a spliced density
+(Sec.~\ref{sec:composite}) is much easier to keep smooth if its pieces are
+already smooth.
+
+\textbf{Implementation.} \file{model/architecture.py::build\_flow}
+constructs the transform via \code{zuko.flows.polynomial.SOSPF}. Both
+shipped checkpoints (loaded and inspected directly in this session) use
+identical hyperparameters:
+\begin{itemize}
+ \item 3 stacked transformations (\code{transforms=3});
+ \item each built from 5 polynomials of degree 8
+   (\code{polynomials=5, degree=8});
+ \item a conditioner network with 2 hidden layers of 128 units each,
+   reading in the full 7-number context $\vect c$;
+ \item \textbf{70{,}412 trainable parameters} per body, confirmed against
+   \file{docs/MODEL\_CARD.md}.
+\end{itemize}
+Training uses the Adam optimizer directly on the negative log-likelihood of
+the training rays (maximum likelihood, as described in
+Sec.~\ref{sec:data}).
+
+\subsection{Body 1: the exact-lower-boundary flow}
+\label{sec:boundary}
+
+The physical magnification distribution has a genuine hard edge at low
+$\mu$ — a lensing ``empty-beam'' cutoff below which the density is
+essentially zero, not merely small. A generic flow does not reproduce a
+hard edge naturally; it will smear it out. The fix used here is to make the
+\emph{coordinate itself} enforce the edge, so the flow never has to learn a
+discontinuity.
+
+A separate ridge regression (frozen at fit time, same style as
+Sec.~\ref{sec:scale}) predicts an edge location $y_{\rm edge}(\vect c)$ and
+a redshift-only edge uncertainty $\sigma_{\rm edge}(z_s)$ (an interpolated
+lookup table in $\log z_s$). The boundary used by the flow is placed a
+fixed margin below the fitted edge,
+\begin{equation}
+ y_b(\vect c) = y_{\rm edge}(\vect c) - 4\,\sigma_{\rm edge}(z_s),
+ \label{eq:ybound}
+\end{equation}
+(\file{model/boundary\_body.py::controls}, margin $k_{\rm margin}=4$ read
+directly from the checkpoint), and the flow is trained not in $y$ but in
+\begin{equation}
+ u = \ln\big(y - y_b(\vect c)\big), \qquad y > y_b(\vect c).
+ \label{eq:utransform}
+\end{equation}
+Because $u\to-\infty$ as $y\to y_b^+$, the log-density under a well-behaved
+base distribution automatically goes to $-\infty$ there too — the density
+in $y$ vanishes continuously at the boundary by construction, not because
+the flow learned to suppress it. Converting the flow's log-density back to
+$y$-space picks up a Jacobian factor $du/dy = 1/(y-y_b)$:
+\begin{equation}
+ \log p_y(y\mid\vect c) = \log p_u(u\mid\vect c) - \ln(y-y_b(\vect c)),
+ \label{eq:body1-logp}
+\end{equation}
+implemented exactly this way at \file{model/boundary\_body.py:56}
+(\code{lp\_u - u - np.log(s)}, where the extra $-\ln s$ is
+Eq.~\ref{eq:ln-jacobian}'s conversion back to $\ln\mu$). Below $y_b$ the
+code simply returns $-\infty$ (\file{model/boundary\_body.py:45–46}).
+
+This body — the ``exact-support'' body — is the default everywhere and
+supplies the complete model at low redshift. Its only known weakness (next
+section) is at high redshift, where the boundary-anchored coordinate is too
+restrictive to also capture a separately-observed asymmetric left flank.
+
+\subsection{Body 2: the high-redshift flank correction}
+
+At high $z_s$ ($\gtrsim 2$), the simulated distributions develop a left
+flank that the symmetric, boundary-anchored Body~1 does not fit well. A
+\emph{second}, independently trained SOSPF flow is used only to patch this
+region. It is trained directly in $y$ (no boundary transform), with an
+asymmetric \emph{split-normal} base distribution — a Normal-like density
+with two different widths on either side of zero,
+\begin{equation}
+ p_{\rm base}(y) = \frac{1}{\sigma_L+\sigma_R}\sqrt{\frac{2}{\pi}}\,
+ \exp\!\left[-\frac12\Big(\frac{y}{\sigma_{L\text{ or }R}}\Big)^{\!2}\right],
+ \qquad \sigma_L = 0.6,\ \sigma_R=1.3,
+ \label{eq:splitnormal}
+\end{equation}
+(\file{model/hybrid\_body.py::SplitNormal}, with $\sigma_L,\sigma_R$ read
+from the checkpoint) — an asymmetric starting point that gives the flow a
+head start on a distribution that is itself asymmetric, rather than asking
+a symmetric base to learn the asymmetry entirely through the transform.
+
+\subsection{Blending the two bodies}
+
+The two bodies are combined with smooth, compactly-supported ``switch''
+functions rather than a hard if/else, so the composite stays continuous and
+differentiable. \file{model/hybrid\_body.py::compact\_switch}$(x,\text{lo},\text{hi})$
+implements the standard smooth bump function
+\begin{equation}
+ w(t) = \begin{cases}
+   0 & t\le 0\\
+   \left[1+\exp\!\left(\tfrac1t-\tfrac1{1-t}\right)\right]^{-1} & 0<t<1\\
+   1 & t\ge1
+ \end{cases},\qquad
+ t=\frac{x-{\rm lo}}{{\rm hi}-{\rm lo}},
+ \label{eq:compactswitch}
+\end{equation}
+which is exactly zero for $x\le{\rm lo}$, exactly one for $x\ge{\rm hi}$, and
+infinitely differentiable everywhere including at the two junctions (its
+derivatives all vanish there) — a standard bump-function construction that
+avoids introducing any kink where the two pieces meet.
+
+The blend weight (\file{model/hybrid\_body.py::load\_hybrid\_body}) is
+\begin{equation}
+ w(\vect c, y) = w_z(z_s)\cdot\big[1-w_y(y)\big],
+\end{equation}
+with $w_z$ a switch in $\log z_s$ active over $2<z_s<3.5$
+(\code{Z\_BLEND\_LO,Z\_BLEND\_HI}) and $w_y$ a switch in $y$ active over
+$-1<y<0$ (\code{Y\_BLEND\_LO,Y\_BLEND\_HI}) — so Body~2 can only contribute
+at high redshift, and only on the left flank, never touching the core or
+any low-redshift context. Densities, not log-densities, are mixed,
+\begin{equation}
+ p(y\mid\vect c) = \big[1-w(\vect c,y)\big]\, p_1(y\mid\vect c) +
+ w(\vect c,y)\, p_2(y'\mid\vect c),
+ \label{eq:bodymix}
+\end{equation}
+which is the only way to combine two densities that keeps the result a
+valid, positive density (mixing log-densities does not, in general, produce
+something that integrates to something sensible). $y' = y - s\cdot\Delta$
+is a small structure-dependent horizontal shift of Body~2's argument
+(\code{flank\_shift}, a function of $z_s$ and of a combined
+``structure'' variable $\sigma_8\sqrt{\Omega_M/0.3}$) that fine-tunes where
+Body~2's flank lands for the most extreme, high-structure contexts. A third,
+narrow compact gate (\code{ISLAND\_*} constants) additionally suppresses a
+weak, unphysical low-density branch that otherwise appears in Body~2's
+output for a small subset of high-structure configurations — a cleanup, not
+part of the physical model.
+
+\section{Stage 3: the high-magnification tail}
+\label{sec:tail}
+
+\subsection{Why the tail is not learned}
+
+Maximum-likelihood training, by construction, fits the density where the
+data is — and rare high-magnification events are, by definition, rare: a
+typical training context may contribute only a handful of rays above
+$\mu\sim2$--3 out of tens of thousands. A flow asked to fit that region by
+likelihood alone has almost no signal to learn from, and produces
+inconsistent, undertrained tails. This part of the density is instead
+built directly from physics and from targeted statistics, independent of
+the flow's own training loss.
+
+\subsection{Peaks-over-threshold regression}
+
+For three fixed magnification thresholds $\mu = 2,3,8$, the
+\emph{survival probability} $S(\mu) = P(\mu' > \mu)$ is estimated directly
+from the simulator's own Monte Carlo counts, and then \emph{that} quantity
+— a much better-behaved regression target than a raw tail density — is
+fit as a smooth function of context by another frozen ridge regression
+(\file{model/tail.py::pot\_tail\_logp}, coefficients in
+\file{model/calibration/tail\_fit.json}, feature basis
+\file{model/features.py::tail\_features}: polynomials in $\log z_s$, the
+same linear cosmology terms as before, plus explicit $1/\sigma_8,
+1/\sigma_8^2$ terms to capture the tail's stronger dependence on the
+matter-power amplitude).
+
+Between the three calibrated points, the log-slope of the survival curve is
+interpolated smoothly. Writing $x=\ln\mu$ and $x_2,x_3,x_8=\ln 2,\ln
+3,\ln 8$, define local power-law slopes between adjacent anchors,
+\begin{equation}
+ k_1 = \mathrm{clip}\!\left(\frac{\ln S_2-\ln S_3}{x_3-x_2},\,k_{\min},k_{\max}\right),
+ \qquad
+ k_2 = \mathrm{clip}\!\left(\frac{\ln S_3-\ln S_8}{x_8-x_3},\,k_{\min},k_{\max}\right),
+\end{equation}
+and blend between them with a soft interpolation built from the softplus
+function $\mathrm{softplus}(t)=\ln(1+e^t)$ (\file{model/tail.py:24–45}), so
+that $\ln S(x)$ behaves like slope $k_1$ just above $\mu=2$, smoothly bends
+toward slope $k_2$ near $\mu=3$, and beyond $\mu=8$ approaches the fixed
+asymptotic slope 1 in $\ln S$ — i.e.\ $S(\mu)\propto\mu^{-1}$, equivalently
+\begin{equation}
+ p_I(\mu\mid\vect c) \;\propto\; \mu^{-2}
+ \label{eq:tailasymptote}
+\end{equation}
+at large magnification, since $p=-dS/d\mu$. This is the standard fold-caustic
+result: the cross-section for magnification above $\mu$ falls as $\mu^{-2}$
+near a fold caustic \cite{Blandford:1986zz}, matching the paper's Sec.~II
+discussion of the same asymptote. The final tail log-density is obtained by
+differentiating the interpolated $\ln S(x)$ and adding back $\ln(-dS/dx)$
+(\file{model/tail.py:43–45}) — this is the standard peaks-over-threshold
+construction from extreme value theory, here with a smoothly-varying
+effective index rather than a single fixed Pareto tail index, because the
+measured slope genuinely changes between $\mu=2$ and $\mu=8$. This
+asymptote is not imposed for $z_s\le0.3$
+(\file{model/composite.py::LOW\_Z\_TAIL\_OFF}), where the simulator does
+not resolve a distinct asymptotic regime at those redshifts.
+
+\section{Stage 4: the composite density}
+\label{sec:composite}
+
+\subsection{Splicing body and tail}
+
+\file{model/composite.py::make\_composite} produces the final callable. For
+a given context, it first looks for the lowest magnification above $\mu=2$
+at which the body's and the tail's log-densities cross
+(\code{\_crossing}), scanning a fine grid and linearly interpolating the
+sign change of $\log p_{\rm body}-\log p_{\rm tail}$. If a crossing exists,
+the two pieces are blended over a fixed window of width 0.3 in $\ln\mu$
+starting at the crossing, using the same smooth switch as
+Eq.~\ref{eq:compactswitch}:
+\begin{equation}
+ p_{\rm raw}(\mu\mid\vect c) = \big[1-w(x)\big]\,p_{\rm body}(\mu\mid\vect
+ c) + w(x)\,p_{\rm tail}(\mu\mid\vect c), \qquad x=\ln\mu.
+ \label{eq:splice}
+\end{equation}
+If \emph{no} crossing is found — meaning the body and tail never
+sensibly agree on that grid — the code does not silently trust an
+unconstrained extrapolation of either piece. Instead it falls back to a
+\emph{fixed}, physics-calibrated window $\mu=2\to3$
+(\file{model/composite.py:104}, comment: \code{plan\_mode =
+"crossing\_or\_pot\_2\_3"}), and even then only after
+\code{\_fixed\_rescue\_window} verifies both endpoints are finite; if they
+are not, the code raises \code{UnverifiedFallbackError} rather than return
+a silently wrong density. This is a deliberate design choice: an emulator
+feeding a cosmological likelihood must fail loudly rather than quietly
+extrapolate somewhere it has no support.
+
+A separate diagnostic, \code{\_fallback\_diagnostics}, checks body/tail
+agreement at several reference magnifications ($20,50,100$) and is used at
+very low redshift ($z_s\le0.3$, where the $\mu^{-2}$ asymptote is not
+imposed at all) to decide whether the raw body alone is already safe to use
+without any tail at all.
+
+\subsection{Normalization}
+
+After splicing, the density is not guaranteed to integrate to exactly 1
+(the two pieces were each independently fit / calibrated). The composite
+therefore evaluates the unnormalized density on a grid — a coarse grid
+covering the full domain plus a fine grid centered on the body's own
+$(m,s)$ (\code{\_grid}, Eq.~\ref{eq:ystd}'s $m,s$ again, this time used to
+place resolution where the mass actually is) — and divides by the
+trapezoidal-rule integral:
+\begin{equation}
+ p_I(\mu\mid\vect c) = \frac{p_{\rm raw}(\mu\mid\vect c)}{\displaystyle\int
+ p_{\rm raw}(\mu'\mid\vect c)\,d\ln\mu'}.
+ \label{eq:renorm}
+\end{equation}
+
+\subsection{The flux calibration}
+
+A physical sum rule constrains the true magnification distribution:
+$\langle 1/\mu\rangle = 1$ (flux/photon-number conservation along random
+lines of sight). The fitted composite need not satisfy this exactly, so a
+small rigid shift $\delta$ in $\ln\mu$ is applied,
+\begin{equation}
+ \delta(\vect c) = \mathrm{clip}\!\Big(\ln\big\langle
+ e^{-\ln\mu}\big\rangle_{\rm model},\, -\delta_{\max},\,\delta_{\max}\Big),
+ \qquad \delta_{\max}=0.05,
+ \label{eq:fluxshift}
+\end{equation}
+(\file{model/composite.py::context}, \code{FLUX\_DELTA\_MAX = 0.05}), and
+the final density is evaluated at the shifted argument,
+$p_I(\mu\mid\vect c) \to p_I(\mu\, e^{-\delta}\mid\vect c)$, i.e.\
+\file{model/composite.py:141}'s \code{unnormalized(x - delta, \ldots)}. The
+clip is a deliberate trust region: an earlier, unclipped version of this
+correction let a badly-fit tail at one extreme corner of the domain drag
+the entire peak by half a decade in $\ln\mu$ (a translation this large is
+not a small correction, it visibly moves the peak off the simulated data);
+$\delta_{\max}=0.05$ was chosen because legitimate corrections measured
+elsewhere in the domain are $\lesssim 0.02$, so the clip essentially never
+binds on a healthy fit but strictly bounds the damage a bad one can do.
+
+\subsection{The final object}
+
+Putting Eqs.~\ref{eq:mu-jacobian}, \ref{eq:splice}, \ref{eq:renorm} and
+\ref{eq:fluxshift} together, the quantity every downstream consumer of this
+emulator actually calls (\file{model/api.py::MagnificationPDF.pdf\_mu}) is
+\begin{empheq}[box=\fbox]{align}
+ p_I(\mu\mid z_s,\vect\Theta) \;=\; \frac{1}{\mu}\cdot
+ \frac{\big[1-w(x')\big]\,p_{\rm body}(\mu' \mid z_s,\vect\Theta) +
+ w(x')\,p_{\rm tail}(\mu'\mid z_s,\vect\Theta)}
+ {\displaystyle\int \big[\cdots\big]\, d\ln\mu''},\quad
+ x'=\ln\mu-\delta,\ \mu'=e^{x'}.
+\end{empheq}
+This is the single function the paper's Sec.~III describes in prose and
+that a cosmological analysis would call in place of the Monte Carlo engine.
+
+\section{Held-out accuracy}
+\label{sec:results}
+
+Every number in this section is read directly from
+\file{production\_model/evaluation/results/} in this session
+(commit \code{fcd795b}), computed by the scripts described below rather
+than asserted.
+
+\subsection{Width-relative KL divergence, $KL_y$}
+
+Ordinary binning in $\ln\mu$ would be blind at low redshift for the same
+reason raw $\ln\mu$ standardization failed in Sec.~\ref{sec:scale}: a fixed
+bin width can hold 99\% of a narrow distribution's mass in one or two
+cells. \file{evaluation/evaluate\_kl.py} instead bins in the standardized
+coordinate $y$ of Eq.~\ref{eq:ystd}, on a fixed 120-bin grid over
+$-6<y<12$, so a bin's width in physical $\ln\mu$ automatically scales with
+that context's own $s(\vect c)$. For each held-out configuration, the
+histogram of the simulator's own rays in $y$ (bins with fewer than 5 rays
+dropped) is compared against the model's density integrated over the same
+bins (12-point trapezoidal quadrature per bin), and
+\begin{equation}
+ KL_y = \sum_i q_i \ln\frac{q_i}{p_i},
+ \label{eq:kly}
+\end{equation}
+with $q_i,p_i$ the (renormalized, on the retained bins) simulated and
+modeled bin probabilities — the standard Kullback–Leibler divergence,
+measuring how much extra information is needed to describe the simulator's
+histogram if you had only the model's prediction.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrr}
+\toprule
+split & configurations & median $KL_y$ \\
+\midrule
+full validation & 972 & 0.002233 \\
+standard acceptance sample & 243 & 0.002253 \\
+\textbf{untouched test} & \textbf{973} & \textbf{0.002227} \\
+\bottomrule
+\end{tabular}
+\caption{From \file{evaluation/results/\{validation,test\}\_summary.json}
+and \code{validation\_acceptance\_243\_summary.json}. The test set was never
+used to fit anything (body, edge, tail, or scale) — its close agreement
+with the validation number (within 0.3\%) is the evidence against a
+generalization gap.}
+\end{table}
+
+On the untouched test set the 90th/99th percentile/maximum $KL_y$ are
+0.004534/0.01221/0.03058 (\file{evaluation/results/test\_summary.json}); the
+worst single case sits at $z_s=10.43,\ \Omega_M=0.496,\ \sigma_8=1.491$ — a
+high-redshift, high-structure corner of the domain, consistent with the
+known-limitations list below.
+
+\subsection{Probability integral transform (PIT)}
+
+$KL_y$ checks local shape; PIT checks whether the model is a
+\emph{calibrated} density in the stronger cumulative sense. For every
+simulator ray $\ln\mu_i$ in a context, its PIT value is
+$U_i = F_{\rm model}(\ln\mu_i\mid\vect c)$, the model's own cumulative
+distribution function evaluated at that ray. If the model is exactly
+correct, $U_i$ is uniformly distributed on $[0,1]$ by construction (a basic
+property of any CDF applied to its own distribution) — a systematic
+departure from uniform reveals a systematic mis-calibration the median
+$KL_y$ could hide. Applied to all $\sim1.94\times10^7$ test rays across all
+973 test configurations, pooled, the Kolmogorov–Smirnov distance from
+uniform is $0.00543$ (\file{paper\_prod/scripts/compute\_pit\_v1.py},
+result recorded in \file{paper\_prod/ML\_CLAIM\_LEDGER\_2026-09-03.md}
+§7); it rises to $0.0139$ restricted to $z_s\ge4$, consistent with the
+residual edge/tail errors concentrating at high redshift.
+
+\subsection{Known, disclosed limitations}
+
+Per \file{docs/MODEL\_CARD.md} and \file{PROVENANCE.md} (both re-read in
+this session): of the 243-configuration acceptance sample, 40 configs have
+their modeled-to-simulated low-tail mass ratio (at the empirical
+$10^{-3}$ quantile) outside $[0.5,2]$, and 21 assign exactly zero modeled
+mass below the empirical $10^{-4}$ quantile — i.e.\ the composite's window
+placement (Sec.~\ref{sec:composite}) is occasionally too aggressive at the
+very edge, a defect concentrated in the extreme tails and invisible to the
+bulk-weighted median $KL_y$. Three of 243 have $KL_y>0.01$.
+
+\section{Summary of the pipeline as a chain of interfaces}
+
+Table~\ref{tab:chain} restates the whole pipeline as inputs/outputs, which
+is the fastest way to see how the pieces compose without re-reading the
+equations.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{p{3.1cm}p{5.4cm}p{5.8cm}}
+\toprule
+stage & implementing code & interface \\
+\midrule
+standardization & \file{model/scale.py} & $(z_s,\vect\Theta)\to (m,s)$ \\
+edge location & \file{model/boundary\_body.py::controls} & $(z_s,\vect\Theta)\to y_{\rm edge}, y_b$ \\
+Body 1 (exact edge) & \file{model/boundary\_body.py} & $(\ln\mu,z_s,\vect\Theta) \to \log p_1$ \\
+Body 2 (high-$z$ flank) & \file{model/hybrid\_body.py} & $(\ln\mu,z_s,\vect\Theta) \to \log p_2$ \\
+blended body & \file{model/hybrid\_body.py::load\_hybrid\_body} & $(\ln\mu,z_s,\vect\Theta) \to \log p_{\rm body}$ \\
+tail & \file{model/tail.py} & $(\ln\mu,z_s,\vect\Theta) \to \log p_{\rm tail}$ \\
+composite & \file{model/composite.py} & body $+$ tail $\to \log p_I(\mu\mid z_s,\vect\Theta)$, normalized, flux-calibrated \\
+public API & \file{model/api.py::MagnificationPDF} & the one object downstream code calls \\
+\bottomrule
+\end{tabular}
+\caption{The pipeline as a chain of interfaces.}
+\label{tab:chain}
+\end{table}
+
+\section{References}
+
+\begin{itemize}
+ \item P.~Jaini, K.~A. Selby, Y.~Yu, \emph{Sum-of-Squares Polynomial Flow},
+   ICML 2019 (arXiv:1905.02325) — the SOSPF transform used for both flow
+   bodies (Sec.~\ref{sec:body}).
+ \item R.~D. Blandford, R.~Narayan, \emph{Fermat's principle,
+   caustics, and the classification of gravitational lens images}, ApJ
+   310, 568 (1986) — source of the $\mu^{-2}$ (image-plane) fold-caustic
+   asymptote used in the tail model (Sec.~\ref{sec:tail}).
+ \item \file{production\_model/PROVENANCE.md},
+   \file{production\_model/docs/MODEL\_CARD.md} — the package's own
+   provenance and model-card records, cross-checked directly against the
+   loaded checkpoints and result files in this session.
+\end{itemize}
+
+\end{document}

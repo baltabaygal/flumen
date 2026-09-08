@@ -1,0 +1,67 @@
+{
+  "patch_date": "2026-09-04",
+  "status": "applied_to_frozen_bundle",
+  "supersedes_composite_sha256_in": "QUALIFICATION.json (2026-09-03, unmodified -- historical record of that day's qualified state, left as-is)",
+  "scope": "model/composite.py only -- no checkpoint changed",
+  "checkpoints_unchanged": {
+    "boundary_body.pt": "1a8a07f9deb6937fa47fd98bb9bc3303b1aad4e8265dd35796735dbec2ef4df3",
+    "asymmetric_body_sl0p6.pt": "fc88382c50b9a6d04bf28e2b3efa033afad5843872719f4ef0380e6f3581df19"
+  },
+  "composite_sha256": {
+    "before": "f799bdf7d665554a6a24106e66b038e07742abb0f63e05826004cb70d9b55a63",
+    "after": "8365a13f4794c82636e537730f827ed1de9b684e5bd2beb80a44b7dc152ae6bf"
+  },
+  "backup_of_pre_patch_bundle": "backups/pre_shoulder_fix_2026-09-04/",
+  "defect": {
+    "description": "raw boundary body under-predicts its own upper shoulder right before the body-to-POT-tail crossing (weight=0 there, composite is exactly the raw body)",
+    "evidence": [
+      "291 held-out validation configs, 0.5<=z<2.0 (pure-v1 regime): 197/291 (68%) read data>model in the crossing-adjacent bin, ~6 sigma sign test",
+      "independent fresh 200k-ray MC at Planck 2018 + 2 other named reference cosmologies x z in {1.0,1.5}: 7/8 crossing-adjacent bins read data/model>1, up to 1.95x",
+      "visual: MC histogram sits above BOTH the raw body and raw POT-tail curves in this neighbourhood"
+    ]
+  },
+  "fix": {
+    "mechanism": "smooth multiplicative Gaussian bump on the unnormalized density, centered at the crossing, scaled to the local transition width",
+    "amplitude": 0.20,
+    "rel_width": 0.5,
+    "rel_center": 0.0,
+    "z_gate": "compact_switch ramp 0.4->0.6, full strength through the verified pure-v1 range, ramp back down 2.0->2.5; exactly 0 outside [0.4,2.5]",
+    "tuned_against": "the same 291-config validation pool (not Planck alone)",
+    "rejected_alternative": "a monotonically non-increasing correction factor, tried first to structurally guarantee no secondary rise -- made the fit worse everywhere (its boosted plateau bled into an adjacent, already-over-predicting region)"
+  },
+  "verification": {
+    "production_tests": "15/15 passed (production_model/evaluation/test_model.py), including all four test_golden_log_density cases verified bit-identical (max|diff|=0.0, all sit outside the z-gate)",
+    "no_op_outside_gate": {
+      "checked_z": [0.2, 0.3, 2.5, 2.6, 3.5, 5.0, 8.0, 10.0],
+      "checked_theta_count": 6,
+      "max_abs_diff": 0.0
+    },
+    "monotonicity_no_secondary_rise": {
+      "method": "reproduces test_panel_descending_branches_have_no_secondary_rise exactly",
+      "checked_panel": "5 MODEL_CARD reference cosmologies + Planck, z in {0.5,1.0,1.5,2.0,2.2,2.4}",
+      "worst_post_mode_slope": -0.10054,
+      "threshold": 0.02,
+      "amplitude_headroom_checked_to": 0.30
+    },
+    "test_untouched_973": {
+      "median_kl_y": {"before": 0.002227, "after": 0.002205072194670986},
+      "p90_kl_y": {"before": 0.004534, "after": 0.0045109292440195506},
+      "p99_kl_y": {"before": 0.012211, "after": 0.012210554328382412},
+      "max_kl_y": {"before": 0.030580, "after": 0.030579938270950697}
+    },
+    "planck_2018_direct": {
+      "theta": [0.674, 0.315, 0.811, 0.0493, 0.965, 3.402],
+      "crossing_adjacent_bin_data_over_model": {
+        "z=1.0": {"before": 1.382, "after": 1.220},
+        "z=1.5": {"before": 1.409, "after": 1.243},
+        "z=2.0": {"before": 1.098, "after": 1.004}
+      },
+      "note": "z=2.0 required correcting the z-gate's upper edge mid-session (first version ramped fully off by z=2.0 itself; corrected to ramp off over [2.0,2.5])"
+    }
+  },
+  "not_claimed": [
+    "does not fully close the gap -- a residual ~10-20% under-prediction can remain in the crossing-adjacent bin after correction",
+    "does not address any equivalent shoulder defect outside 0.4<=z<=2.5",
+    "not re-run against experiments/highz_edge_hybrid_2026-09-02/test_production_candidate.py (that 18-test file imports the mutable -ar/experiments source, not this frozen bundle's copy, so it does not exercise this change either way)"
+  ]
+}

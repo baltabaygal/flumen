@@ -1,0 +1,68 @@
+{
+  "n": 40,
+  "n_rebinned": 40,
+  "metrics": {
+    "binned_kl": {
+      "median": 0.001875546487499852,
+      "p90": 0.020934888371609867,
+      "max": 0.05340648152966212,
+      "worst_context": "box hi-struct",
+      "worst_z": 2.0
+    },
+    "binned_tv": {
+      "median": 0.012244302101293729,
+      "p90": 0.03453832696911437,
+      "max": 0.06804772190488925,
+      "worst_context": "box hi-struct",
+      "worst_z": 10.0
+    },
+    "reliable_log10_mae": {
+      "median": 0.04105227323412066,
+      "p90": 0.06121866086412263,
+      "max": 0.07603873925149293,
+      "worst_context": "box hi-struct",
+      "worst_z": 10.0
+    },
+    "unsupported_reliable_bins": {
+      "median": 0.0,
+      "p90": 1.0,
+      "max": 5.0,
+      "worst_context": "box hi-struct",
+      "worst_z": 2.0
+    }
+  },
+  "target_box_hi": [
+    {
+      "context": "box hi-struct",
+      "z": 3.5,
+      "reference": "branch-clean",
+      "bin_source": "rays",
+      "n_bins": 98,
+      "n_rays": 393340,
+      "binned_kl": 0.006301544288380905,
+      "binned_tv": 0.03609959199853831,
+      "reliable_log10_mae": 0.06228924030767771,
+      "unsupported_reliable_bins": 0,
+      "survival_ratio_mu2": 1.0277777365906973,
+      "survival_ratio_mu3": 1.0940852164325792,
+      "survival_ratio_mu5": 1.1080720763873027,
+      "survival_ratio_mu10": 1.1188194122660011
+    },
+    {
+      "context": "box hi-struct",
+      "z": 5.0,
+      "reference": "branch-clean",
+      "bin_source": "rays",
+      "n_bins": 122,
+      "n_rays": 382723,
+      "binned_kl": 0.003196484677735087,
+      "binned_tv": 0.03436485307695616,
+      "reliable_log10_mae": 0.044152606690266626,
+      "unsupported_reliable_bins": 0,
+      "survival_ratio_mu2": 0.9368360787446174,
+      "survival_ratio_mu3": 0.9587190188136206,
+      "survival_ratio_mu5": 0.9664372027034734,
+      "survival_ratio_mu10": 0.9815565751352783
+    }
+  ]
+}

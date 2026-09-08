@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+training/*_retrained.pt
+evaluation/results/*_rerun.json
+
+data/production_data/
+evaluation/reference/*.npz
