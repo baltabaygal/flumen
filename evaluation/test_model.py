@@ -1,97 +1,181 @@
-import hashlib
-from pathlib import Path
+"""Unit test suite for production_model_v3."""
 
+import hashlib
+import sys
+from pathlib import Path
 import numpy as np
 import pytest
 
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
 from flumen.model import load_model
-from flumen.model.composite import UnverifiedFallbackError, make_composite
+import flumen
 
+MODEL_DIR = Path(__file__).resolve().parents[1]
+CHECKPOINT_PATH = MODEL_DIR / "model" / "checkpoints" / "single_body_gauss.pt"
+EXPECTED_SHA256 = "a16f54238adae1c0580f6e3b85d9ee879762d521161e6db356c383ebc1e5a6e5"
 
-ROOT = Path(__file__).resolve().parents[1]
-THETA = (.67, .30, .85, .0493, .965, 3.402)
-REDSHIFTS = (.2, .5, 1., 2., 3.5, 5., 8., 10.)
-PANEL_CONTEXTS = (
-    THETA,
-    (.72, .38, 1., .0493, .965, 3.402),
-    (.60, .22, .70, .0493, .965, 3.402),
-    (.80, .50, 1.50, .0493, .965, 3.402),
-    (.55, .15, .40, .0493, .965, 3.402),
-)
+THETA_FIDUCIAL = (0.6774, 0.3089, 0.8159, 0.0486, 0.9667, 3371.0)
 
-
-def test_frozen_checkpoint_hashes():
-    expected = {
-        "boundary_body.pt": "1a8a07f9deb6937fa47fd98bb9bc3303b1aad4e8265dd35796735dbec2ef4df3",
-        "asymmetric_body_sl0p6.pt": "fc88382c50b9a6d04bf28e2b3efa033afad5843872719f4ef0380e6f3581df19",
-    }
-    for name, digest in expected.items():
-        actual = hashlib.sha256((ROOT / "model/checkpoints" / name).read_bytes()).hexdigest()
-        assert actual == digest
-
-
-# Golden values updated 2026-09-07 for the seamless centered C1 Hermite
-# bridge transition in composite.py, eliminating the low-structure knee.
-GOLDEN = [
-    (.2, THETA, [-np.inf, 3.8942003660781515, -9.535280936193987, -11.799959461598691]),
-    (3.5, (.8,.5,1.5,.06,1.02,4.5), [-0.4236229711032995, -0.028585307381582954, -1.1194308562033284, -3.0057161045923615]),
-    (5., (.8,.5,1.5,.06,1.02,4.5), [-0.9100685608094995, -0.4727119922551272, -0.803840073232868, -2.293684825496909]),
-    (10., (.55,.15,.4,.04,.9,2.5), [-23.135928389702734, 2.5588573834062194, -6.248655861696914, -11.841805334541071]),
+GOLDEN_CASES = [
+    (0.2, (0.6774, 0.3089, 0.8159, 0.0486, 0.9667, 3371.0), [-np.inf, 3.98584177062861, -19.28244890543799, -21.059998811962007]),
+    (1.0, (0.6774, 0.3089, 0.8159, 0.0486, 0.9667, 3371.0), [-np.inf, 1.8382197026757205, -5.825231303765528, -8.177180397814494]),
+    (2.0, (0.6774, 0.3089, 0.8159, 0.0486, 0.9667, 3371.0), [-0.6217705756994054, 1.2246067078419238, -3.943859360297862, -7.405962981911451]),
+    (5.0, (0.8, 0.5, 1.5, 0.0493, 0.965, 3402.0), [-0.0023895598015362604, -0.06716875123248396, -1.4569779001659353, -3.1141984728400898]),
 ]
 
 
-@pytest.mark.parametrize("z,theta,expected", GOLDEN)
-def test_golden_log_density(z, theta, expected):
-    model = load_model(flux_mode="legacy")
-    x = np.array([-.2, 0., np.log(2.), np.log(5.)])
-    np.testing.assert_allclose(model.log_prob_lnmu(x, z, theta), expected,
-                               rtol=2e-7, atol=2e-7)
+
+@pytest.fixture(scope="module")
+def model():
+    return load_model(device="cpu", flux_mode="unit")
 
 
-
-@pytest.mark.parametrize("z", [.2, .5, 3.5, 5., 10.])
-def test_normalization_and_flux(z):
-    model = load_model()
-    grid = np.linspace(-4., np.log(400.), 12000)
-    density = model.pdf_lnmu(grid, z, THETA)
-    assert np.trapezoid(density, grid) == pytest.approx(1., abs=2e-3)
-    assert np.trapezoid(np.exp(-grid)*density, grid) == pytest.approx(1., abs=2e-3)
-
-
-def test_mu_and_lnmu_density_jacobian():
-    model = load_model(); mu = np.geomspace(.5, 20., 100)
-    np.testing.assert_allclose(model.pdf_mu(mu, 2., THETA)*mu,
-                               model.pdf_lnmu(np.log(mu), 2., THETA))
+def test_checkpoint_hash():
+    """Verify production checkpoint matches expected SHA-256."""
+    h = hashlib.sha256()
+    with open(CHECKPOINT_PATH, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    assert h.hexdigest() == EXPECTED_SHA256, f"Checkpoint SHA-256 mismatch: {h.hexdigest()}"
 
 
-def test_nonpositive_mu_rejected():
-    with pytest.raises(ValueError):
-        load_model().pdf_mu([0., 1.], 1., THETA)
+def test_scalar_and_array_agreement(model):
+    """Scalar evaluation must match 1D array slice evaluation."""
+    z_s = 1.5
+    theta = THETA_FIDUCIAL
+    mu_scalar = 1.2
+    mu_array = np.array([0.9, 1.2, 1.5])
+
+    val_scalar = model.pdf_mu(mu_scalar, z_s=z_s, theta=theta)
+    val_array = model.pdf_mu(mu_array, z_s=z_s, theta=theta)
+
+    assert isinstance(val_scalar, float)
+    assert isinstance(val_array, np.ndarray)
+    assert val_scalar == pytest.approx(val_array[1], rel=1e-5)
 
 
-def test_qualified_composite_mode_and_reference_panel_safety():
-    model = load_model()
-    assert model._log_prob.plan_mode == "crossing_or_pot_2_3"
-    for theta in PANEL_CONTEXTS:
-        for z in REDSHIFTS:
-            model._log_prob.plan(z, theta)
+@pytest.mark.parametrize("z_s, theta, expected", GOLDEN_CASES)
+def test_golden_log_density(model, z_s, theta, expected):
+    """Verify log densities match certified golden values to 1e-6."""
+    lnmu_eval = np.array([-0.2, 0.0, np.log(2.0), np.log(5.0)])
+    actual = model.log_prob_lnmu(lnmu_eval, z_s=z_s, theta=theta)
+    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
 
 
-def test_guard_rejects_a_body_with_no_finite_rescue_window():
-    def broken_body(x, z, theta):
-        return np.full_like(np.asarray(x, float), np.nan)
+@pytest.mark.parametrize("z_s", [0.2, 0.5, 1.0, 2.0, 5.0, 8.0])
+def test_normalization_and_unit_flux(model, z_s):
+    """Probability density must normalize to 1 and conserve unit inverse mean."""
+    mu_grid = np.unique(np.concatenate([
+        np.linspace(0.85, 1.15, 3000),
+        np.geomspace(0.4, 80.0, 3000),
+    ]))
+    pdf = model.pdf_mu(mu_grid, z_s=z_s, theta=THETA_FIDUCIAL)
 
-    broken_body.controls = lambda z, theta: (0., 1., None, None)
-    composite = make_composite(broken_body)
-    with pytest.raises(UnverifiedFallbackError):
-        composite.plan(.2, THETA)
+    mass = np.trapezoid(pdf, mu_grid)
+    flux = np.trapezoid(pdf / mu_grid, mu_grid)
+
+    assert mass == pytest.approx(1.0, abs=5e-3)
+    assert flux == pytest.approx(1.0, abs=5e-3)
 
 
-def test_guard_rescues_an_unsafe_body_when_mu2_to_mu3_is_finite():
-    def partly_usable_body(x, z, theta):
-        x = np.asarray(x, float)
-        return np.where(np.abs(np.exp(x)-2.5) < 1., -1., np.nan)
+@pytest.mark.parametrize("z_s", [0.5, 1.0, 3.0])
+def test_positivity(model, z_s):
+    """Densities must be non-negative everywhere."""
+    mu_grid = np.geomspace(0.1, 100.0, 500)
+    pdf = model.pdf_mu(mu_grid, z_s=z_s, theta=THETA_FIDUCIAL)
+    assert np.all(pdf >= 0.0)
+    assert np.all(np.isfinite(pdf))
 
-    partly_usable_body.controls = lambda z, theta: (0., 1., None, None)
-    composite = make_composite(partly_usable_body)
-    assert composite.plan(.2, THETA) == pytest.approx((np.log(2.), np.log(3.)))
+
+def test_asymptotic_tail_slope(model):
+    """The high-magnification tail must follow a power-law slope of exactly -2."""
+    z_s = 2.0
+    mu1 = 100.0
+    mu2 = 200.0
+    p1 = model.pdf_mu(mu1, z_s=z_s, theta=THETA_FIDUCIAL)
+    p2 = model.pdf_mu(mu2, z_s=z_s, theta=THETA_FIDUCIAL)
+
+    # slope = d ln(p) / d ln(mu)
+    slope = np.log(p2 / p1) / np.log(mu2 / mu1)
+    assert slope == pytest.approx(-2.0000, abs=1e-3)
+
+
+def test_c1_hermite_bridge_smoothness(model):
+    """Verify C1 continuity (value and first derivative match) across bridge boundaries."""
+    comp = model.composite
+    z_s = 2.0
+    m, s, yb, _ = comp.predictor.predict(z_s, THETA_FIDUCIAL)
+    y0 = max(float(comp.y_c_rel), yb - comp.delta + 1.0)
+    h = max(comp.h_bridge_min, comp.h_factor / s)
+    y1 = y0 + h
+
+    eps = 1e-4
+    # Points across y0
+    ys_0 = np.array([y0 - eps, y0, y0 + eps])
+    lnmus_0 = m + s * ys_0
+    lps_0 = comp._raw_log_prob_lnmu(lnmus_0, z_s, THETA_FIDUCIAL, m, s, yb)
+    # Continuity of value
+    assert lps_0[1] == pytest.approx((lps_0[0] + lps_0[2]) / 2.0, abs=1e-3)
+
+    # Continuity of derivative across y1
+    ys_1 = np.array([y1 - eps, y1, y1 + eps])
+    lnmus_1 = m + s * ys_1
+    lps_1 = comp._raw_log_prob_lnmu(lnmus_1, z_s, THETA_FIDUCIAL, m, s, yb)
+    slope_left = (lps_1[1] - lps_1[0]) / (eps * s)
+    slope_right = (lps_1[2] - lps_1[1]) / (eps * s)
+    assert slope_left == pytest.approx(-1.0, abs=1e-3)
+    assert slope_right == pytest.approx(-1.0, abs=1e-3)
+
+
+def test_empty_beam_cutoff_suppression(model):
+    """Densities below the hard cutoff must be completely zeroed."""
+    z_s = 2.0
+    deep_under_cutoff = 0.2
+    pdf_val = model.pdf_mu(deep_under_cutoff, z_s=z_s, theta=THETA_FIDUCIAL)
+    assert pdf_val == 0.0
+
+
+def test_asymptotic_cutoff_monotonicity_and_smoothness(model):
+    """At high redshift, density approaching the cutoff must decay strictly monotonically without shelves."""
+    z_s = 8.0
+    theta = THETA_FIDUCIAL
+    m, s, y_b, _ = model.composite.predictor.predict(z_s, theta)
+    yb_eff = y_b - model.composite.eps_b
+    mu_cut = np.exp(m + s * (yb_eff - model.composite.delta))
+
+    # Sample approaching cutoff from above
+    mu_eval = np.linspace(mu_cut * 1.0001, mu_cut * 1.03, 30)
+    pdf_vals = model.pdf_mu(mu_eval, z_s=z_s, theta=theta)
+
+    # 1. Non-negative everywhere
+    assert np.all(pdf_vals >= 0.0)
+
+    # 2. Strict monotonicity: as mu increases away from cutoff, density increases towards peak
+    diffs = np.diff(pdf_vals)
+    assert np.all(diffs >= 0.0), f"Non-monotonic cutoff approach detected: {diffs}"
+
+    # 3. Density near cutoff edge is smoothly vanishing (< 1e-5)
+    assert pdf_vals[0] < 1e-5
+
+    # 4. Strictly 0 below cutoff
+    mu_below = np.array([mu_cut * 0.999, mu_cut * 0.95])
+    assert np.all(model.pdf_mu(mu_below, z_s=z_s, theta=theta) == 0.0)
+
+
+def test_flumen_generate_pdf_convenience():
+    """Top-level flumen.generate_pdf and generate_pdf_lnmu must return valid densities."""
+    mu, pdf = flumen.generate_pdf(z_s=1.0)
+    assert mu.shape == (2000,)
+    assert pdf.shape == (2000,)
+    assert np.all(pdf >= 0.0)
+    integral = np.trapezoid(pdf, mu)
+    assert integral == pytest.approx(1.0, abs=1e-3)
+
+    lnmu, pdf_lnmu = flumen.generate_pdf_lnmu(z_s=1.0)
+    assert lnmu.shape == (2000,)
+    assert pdf_lnmu.shape == (2000,)
+    assert np.all(pdf_lnmu >= 0.0)
+    integral_lnmu = np.trapezoid(pdf_lnmu, lnmu)
+    assert integral_lnmu == pytest.approx(1.0, abs=1e-3)

@@ -23,7 +23,8 @@ import numpy as np
 
 from .model import load_model
 
-__all__ = ["generate_pdf", "generate_pdf_lnmu", "get_model", "TRAINING_RANGE"]
+__version__ = "0.3.0"
+__all__ = ["generate_pdf", "generate_pdf_lnmu", "get_model", "TRAINING_RANGE", "__version__"]
 
 # Confirmed training/validity box (see docs/MODEL_CARD.md). Calls outside this
 # box are extrapolation -- generate_pdf warns rather than raises, since a
