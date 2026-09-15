@@ -14,11 +14,15 @@ class MagnificationPDF:
     flux_mode : str, default="unit"
         "unit" enforces unit inverse-magnification moment <1/mu> = 1.0.
         "standard" enforces unit normalization integral p(mu) dmu = 1.0.
+    tail_mode : str, default="asymptotic"
+        "asymptotic" (shipped default) uses the smooth C^inf relaxation approaching mu^-2 at rate O(1/mu).
+        "hermite" uses the C^1 cubic Hermite bridge matching mu^-2 at finite y1.
     """
 
-    def __init__(self, device="cpu", *, flux_mode="unit"):
-        self.composite = SingleBodyComposite(device=device, flux_mode=flux_mode)
+    def __init__(self, device="cpu", *, flux_mode="unit", tail_mode="asymptotic"):
+        self.composite = SingleBodyComposite(device=device, flux_mode=flux_mode, tail_mode=tail_mode)
         self.flux_mode = flux_mode
+        self.tail_mode = tail_mode
 
     def log_prob_lnmu(self, lnmu, z_s, theta):
         """Log probability density with respect to d ln(mu).
@@ -56,6 +60,6 @@ class MagnificationPDF:
         return self.pdf_lnmu(np.log(mu_arr), z_s, theta) / mu_arr
 
 
-def load_model(device="cpu", *, flux_mode="unit"):
+def load_model(device="cpu", *, flux_mode="unit", tail_mode="asymptotic"):
     """Load the single-body production emulator."""
-    return MagnificationPDF(device=device, flux_mode=flux_mode)
+    return MagnificationPDF(device=device, flux_mode=flux_mode, tail_mode=tail_mode)

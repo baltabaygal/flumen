@@ -46,17 +46,17 @@ _FIDUCIAL = dict(h=0.674, Om=0.315, sigma8=0.811, Ob=0.0493, ns=0.965, zeq=3402.
 _MODEL_CACHE = {}
 
 
-def get_model(device="cpu", flux_mode="unit"):
+def get_model(device="cpu", flux_mode="unit", tail_mode="asymptotic"):
     """Return the (cached) loaded :class:`model.MagnificationPDF`.
 
     The checkpoint and calibration files are only read from disk once per
-    ``(device, flux_mode)`` combination; repeated calls reuse the same
+    ``(device, flux_mode, tail_mode)`` combination; repeated calls reuse the same
     in-memory model. Most users do not need this directly -- use
     ``generate_pdf`` instead.
     """
-    key = (device, flux_mode)
+    key = (device, flux_mode, tail_mode)
     if key not in _MODEL_CACHE:
-        _MODEL_CACHE[key] = load_model(device=device, flux_mode=flux_mode)
+        _MODEL_CACHE[key] = load_model(device=device, flux_mode=flux_mode, tail_mode=tail_mode)
     return _MODEL_CACHE[key]
 
 
@@ -86,6 +86,7 @@ def generate_pdf(
     n_mu=2000,
     device="cpu",
     flux_mode="unit",
+    tail_mode="asymptotic",
     warn_out_of_range=True,
 ):
     """Predict the GW weak-lensing magnification PDF p(mu) for one cosmology.
@@ -116,9 +117,10 @@ def generate_pdf(
     device : str, optional
         "cpu" (default) or "cuda".
     flux_mode : str, optional
-        "unit" (default) enforces exact <1/mu> = 1. "legacy" uses the
-        previous capped calibration -- see docs/MODEL_CARD.md for the
-        tradeoff between the two.
+        "unit" (default) enforces exact <1/mu> = 1. "standard" enforces unit normalization.
+    tail_mode : str, optional
+        "asymptotic" (default) uses the smooth C^inf relaxation approaching mu^-2 at rate O(1/mu).
+        "hermite" uses the finite C^1 cubic Hermite bridge.
     warn_out_of_range : bool, optional
         If True (default), warn when a parameter falls outside
         ``TRAINING_RANGE``. Does not raise -- the model still evaluates.
@@ -147,7 +149,7 @@ def generate_pdf(
         _check_range("Ob", Ob, warn_out_of_range)
         _check_range("zeq", zeq, warn_out_of_range)
 
-    model = get_model(device=device, flux_mode=flux_mode)
+    model = get_model(device=device, flux_mode=flux_mode, tail_mode=tail_mode)
 
     if mu is None:
         mu = np.geomspace(mu_min, mu_max, n_mu)
@@ -173,6 +175,7 @@ def generate_pdf_lnmu(
     n_lnmu=2000,
     device="cpu",
     flux_mode="unit",
+    tail_mode="asymptotic",
     warn_out_of_range=True,
 ):
     """Same as :func:`generate_pdf`, but on the ln(mu) grid/density.
@@ -189,7 +192,7 @@ def generate_pdf_lnmu(
         _check_range("Ob", Ob, warn_out_of_range)
         _check_range("zeq", zeq, warn_out_of_range)
 
-    model = get_model(device=device, flux_mode=flux_mode)
+    model = get_model(device=device, flux_mode=flux_mode, tail_mode=tail_mode)
 
     if lnmu is None:
         lnmu = np.linspace(lnmu_min, lnmu_max, n_lnmu)

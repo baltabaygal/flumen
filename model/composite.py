@@ -14,9 +14,10 @@ CHECKPOINT_PATH = Path(__file__).resolve().parent / "checkpoints" / "single_body
 class SingleBodyComposite:
     """Single-body normalizing flow with physical boundary cutoff and smooth C1 mu^-2 tail bridge."""
 
-    def __init__(self, device="cpu", *, checkpoint_path=CHECKPOINT_PATH, flux_mode="unit"):
+    def __init__(self, device="cpu", *, checkpoint_path=CHECKPOINT_PATH, flux_mode="unit", tail_mode="asymptotic"):
         self.device = torch.device(device)
         self.flux_mode = flux_mode
+        self.tail_mode = tail_mode  # "asymptotic" (default shipped) or "hermite"
         self.predictor = ContextPredictor()
         self._calibration_cache = {}
 
@@ -150,25 +151,36 @@ class SingleBodyComposite:
                 lp_u = self.flow(c_exp).log_prob(u_tensor).cpu().numpy().flatten()
                 log_prob[idx_valid] = (lp_u - u_valid) - np.log(s)
 
-        # 2. C1 Hermite Bridge region: y0 < y <= y1
-        mask_bridge = (y_arr > y0) & (y_arr <= y1)
-        if np.any(mask_bridge):
-            dy = y_arr[mask_bridge] - y0
-            lp_y_bridge = a0 + a1 * dy + a2 * dy**2 + a3 * dy**3
-            log_prob[mask_bridge] = lp_y_bridge - np.log(s)
+        if self.tail_mode == "asymptotic":
+            # 2. Experimental Asymptotic Relaxation Bridge: y > y0
+            # q'(y) = -s + (d0 + s) * exp(-(y - y0) / h)
+            # q(y)  = f0 - s * dy + h * (d0 + s) * (1 - exp(-dy / h))
+            # Smooth C^inf relaxation to mu^-2 with exact O(1/mu) fold-caustic rate
+            mask_tail = (y_arr > y0)
+            if np.any(mask_tail):
+                dy = y_arr[mask_tail] - y0
+                lp_y_tail = f0 - s * dy + h * (d0 + s) * (1.0 - np.exp(-dy / h))
+                log_prob[mask_tail] = lp_y_tail - np.log(s)
+        else:
+            # 2. Production C1 Hermite Bridge region: y0 < y <= y1
+            mask_bridge = (y_arr > y0) & (y_arr <= y1)
+            if np.any(mask_bridge):
+                dy = y_arr[mask_bridge] - y0
+                lp_y_bridge = a0 + a1 * dy + a2 * dy**2 + a3 * dy**3
+                log_prob[mask_bridge] = lp_y_bridge - np.log(s)
 
-        # 3. Asymptotic tail region: y > y1
-        mask_tail = (y_arr > y1)
-        if np.any(mask_tail):
-            dy_tail = y_arr[mask_tail] - y1
-            lp_y_tail = f1 - s * dy_tail
-            log_prob[mask_tail] = lp_y_tail - np.log(s)
+            # 3. Asymptotic tail region: y > y1
+            mask_tail = (y_arr > y1)
+            if np.any(mask_tail):
+                dy_tail = y_arr[mask_tail] - y1
+                lp_y_tail = f1 - s * dy_tail
+                log_prob[mask_tail] = lp_y_tail - np.log(s)
 
         return log_prob
 
     def _calibrate_flux(self, z_s, theta, m, s, y_b):
         """Compute normalization mass and boundary-preserving shift enforcing unit flux."""
-        cache_key = (float(z_s), tuple(float(x) for x in theta), self.flux_mode)
+        cache_key = (float(z_s), tuple(float(x) for x in theta), self.flux_mode, self.tail_mode)
         if cache_key in self._calibration_cache:
             return self._calibration_cache[cache_key]
 

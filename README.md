@@ -12,9 +12,9 @@ Monte-Carlo run.
 This is the production model **v3** (released 2026-09-14): a single-body SOS
 polynomial flow (20,874 weights with standard Gaussian base) enforcing the
 physical Dyer–Roeder (1973) empty-beam cutoff via \(u = \ln(y - y_b + \delta)\)
-(with boundary buffer \(\epsilon_b = 0.02\)), handed off through a width-adaptive
-\(C^1\) Hermite bridge (\(h = 1.0/s\)) to an exact asymptotic power-law tail
-\(p(\mu) \propto \mu^{-2.0000}\), with exact unit-flux (\(\langle 1/\mu \rangle = 1.0000\))
+(with boundary buffer \(\epsilon_b = 0.02\)), handed off through a smooth
+\(C^\infty\) asymptotic relaxation bridge (\(h = 1.0/s\)) to the asymptotic power-law tail
+\(p(\mu) \propto \mu^{-2.0000}\) at the physical \(\mathcal{O}(1/\mu)\) fold-caustic rate, with exact unit-flux (\(\langle 1/\mu \rangle = 1.0000\))
 calibration. See `docs/MODEL_CARD.md` for architecture, accuracy metrics, and known
 limitations, and `PROVENANCE.md` for checkpoint lineage.
 

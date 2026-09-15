@@ -6,7 +6,7 @@
 - **Base Distribution**: Independent standard Gaussian with natural super-exponential descent.
 - **Coordinate Transformation**: \(u = \ln(y - y_b + \delta)\) with margin \(\delta = 0.05\) and boundary buffer \(\epsilon_b = 0.02\).
 - **Lower Cutoff Behavior**: Hard empty-beam cutoff strictly vanishing for \(\mu < \mu_{\text{cut}} = \exp(m + s(y_b - \epsilon_b - \delta))\). Models the fundamental Dyer–Roeder (1973) empty-beam limit.
-- **Tail Handover**: Width-adaptive \(C^1\) cubic Hermite bridge (\(h = 1.0/s\)) connecting the SOSPF core at scale-invariant \(y_0 = 10\sigma\) to the asymptotic \(\mu^{-2.0000}\) power-law tail without derivative discontinuity or artificial shelf artifacts.
+- **Tail Handover**: Smooth \(C^\infty\) asymptotic relaxation bridge (\(q'(y) = -s + (d_0 + s)e^{-(y-y_0)/h}\) with \(h = 1.0/s\)) connecting the SOSPF core at scale-invariant \(y_0 = 10\sigma\) to the asymptotic \(\mu^{-2.0000}\) power-law tail at the exact physical \(\mathcal{O}(1/\mu)\) fold-caustic rate without derivative discontinuity or artificial shelf artifacts.
 - **Context Predictors**: Calibrated Degree-3 polynomial Ridge regression models evaluated in pure NumPy for \((m, s, y_b, \bar{\kappa})\).
 - **Total Parameters**: 20,874 flow weights + 120 context regression coefficients.
 
