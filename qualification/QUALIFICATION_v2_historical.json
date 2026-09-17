@@ -1,0 +1,64 @@
+{
+  "qualified_at": "2026-09-03",
+  "status": "qualified_candidate",
+  "pairing": {
+    "boundary_body": {
+      "variant": "v1_warm_start_finetune",
+      "epoch": 11,
+      "best_val_nll_u": 0.6102788436983607,
+      "sha256": "1a8a07f9deb6937fa47fd98bb9bc3303b1aad4e8265dd35796735dbec2ef4df3"
+    },
+    "asymmetric_body_sha256": "fc88382c50b9a6d04bf28e2b3efa033afad5843872719f4ef0380e6f3581df19",
+    "composite_plan_mode": "crossing_or_pot_2_3",
+    "composite_sha256": "f799bdf7d665554a6a24106e66b038e07742abb0f63e05826004cb70d9b55a63"
+  },
+  "verification": {
+    "production_tests": "15/15 passed",
+    "experiment_regression_tests": "18/18 passed",
+    "experiment_port_equivalence": {
+      "contexts": 40,
+      "points_per_context": 500,
+      "plan_or_mask_mismatches": 0,
+      "max_finite_abs_logp_difference": 0.0
+    },
+    "validation_full": {
+      "configurations": 972,
+      "median_kl_y": 0.002233074243493935,
+      "p90_kl_y": 0.004207104183513693,
+      "p99_kl_y": 0.010481384885450038,
+      "max_kl_y": 0.016740507933525686
+    },
+    "test_untouched": {
+      "configurations": 973,
+      "median_kl_y": 0.0022266769296824464,
+      "p90_kl_y": 0.004534041794093131,
+      "p99_kl_y": 0.012210554328382412,
+      "max_kl_y": 0.030579938270950697
+    },
+    "acceptance_243": {
+      "median_kl_y": 0.0022525979905006197,
+      "foot_q1e3_outside_0p5_to_2": 40,
+      "foot_q1e4_zero_mass": 21,
+      "kl_y_above_0p01": 3
+    },
+    "panel_40_width_relative": {
+      "median_binned_kl": 0.001875546487499852,
+      "p90_binned_kl": 0.020934888371609867,
+      "max_binned_kl": 0.05340648152966212
+    },
+    "targeted_source_plane_outlier_box_hi_z2": {
+      "width_sigma": 0.25,
+      "source_js_nats": 0.00023402411408754694,
+      "source_js_distance": 0.015297846714081919,
+      "source_kl_conditional_on_model_support": 0.0005155750845989448,
+      "note": "The large floor-sensitive KL is driven by a tiny set of simulator rays outside modeled physical support; see source_kl_outlier_z2_audit.json."
+    }
+  },
+  "rejected_checkpoint": {
+    "variant": "v2_canonical_allocation",
+    "epoch": 12,
+    "sha256": "0e3f23b6c67585909817d34941728eff1dc98ededcce430a1929cba44c0716fb",
+    "reason": "No aggregate or target-region KL benefit; not shipped."
+  },
+  "correction": "The historical 30 q1e-3 failures and 18 q1e-4 zero-mass contexts were measured with the epoch-14 body, not the selected epoch-11 v1."
+}

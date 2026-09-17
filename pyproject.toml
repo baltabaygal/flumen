@@ -5,15 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "flumen"
 version = "0.3.0"
-description = "Fast Lensing Unified Magnification Emulator with Normalizing flows -- a conditional GW weak-lensing magnification PDF emulator"
+description = "Fast Lensing Universal Magnification Emulator with Normalizing flows -- a conditional GW weak-lensing magnification PDF emulator"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Galymzhan Baltabay", email = "galymzhan.baltabay@kbfi.ee"},
+    {name = "Ville Vaskonen", email = "ville.vaskonen@kbfi.ee"},
+]
 requires-python = ">=3.12"
-dependencies = ["numpy==2.4.3", "torch==2.6.0", "zuko==1.6.0", "h5py==3.16.0"]
+dependencies = ["numpy==2.4.3", "torch==2.6.0", "zuko==1.6.0", "h5py==3.16.0", "scikit-learn>=1.4.0"]
 
 [project.optional-dependencies]
 plots = ["matplotlib==3.10.9", "seaborn==0.13.2", "pandas==3.0.3"]
 
 [tool.setuptools]
-packages = ["flumen", "flumen.model", "flumen.training", "flumen.evaluation"]
+packages = ["flumen", "flumen.model", "flumen.training", "flumen.evaluation", "flumen.data"]
 package-dir = {flumen = "."}
 
 [tool.setuptools.package-data]

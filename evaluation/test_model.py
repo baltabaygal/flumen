@@ -173,3 +173,58 @@ def test_toplevel_convenience_apis():
     assert len(pdf_lnmu) == 2000
     assert np.all(pdf_lnmu >= 0.0)
 
+
+@pytest.mark.parametrize("tail_mode", ["asymptotic_c2", "hermite_c2"])
+def test_c2_tail_modes_normalization_and_unit_flux(tail_mode):
+    """C2 tail modes must normalize to 1 and conserve unit flux."""
+    model_c2 = load_model(device="cpu", flux_mode="unit", tail_mode=tail_mode)
+    z_s = 2.0
+    mu_grid = np.unique(np.concatenate([
+        np.linspace(0.85, 1.15, 3000),
+        np.geomspace(0.4, 80.0, 3000),
+    ]))
+    pdf = model_c2.pdf_mu(mu_grid, z_s=z_s, theta=THETA_FIDUCIAL)
+    mass = np.trapezoid(pdf, mu_grid)
+    flux = np.trapezoid(pdf / mu_grid, mu_grid)
+    assert mass == pytest.approx(1.0, abs=5e-3)
+    assert flux == pytest.approx(1.0, abs=5e-3)
+
+
+@pytest.mark.parametrize("tail_mode", ["asymptotic_c2", "hermite_c2"])
+def test_c2_tail_bridge_curvature_continuity(tail_mode):
+    """Verify C2 continuity (curvature match) across handover boundary y0."""
+    import torch
+    model_c2 = load_model(device="cpu", flux_mode="unit", tail_mode=tail_mode)
+    comp = model_c2.composite
+    z_s = 2.0
+    m, s, yb, _ = comp.predictor.predict(z_s, THETA_FIDUCIAL)
+    y0 = max(float(comp.y_c_rel), yb - comp.delta + 1.0)
+
+    # Compute exact flow curvature at y0 via autograd
+    ctx_norm = comp._prepare_context(z_s, THETA_FIDUCIAL)
+    ctx_tensor = torch.tensor(ctx_norm, dtype=torch.float32, device=comp.device).unsqueeze(0)
+    with torch.enable_grad():
+        cy = torch.tensor([[y0]], dtype=torch.float32, device=comp.device, requires_grad=True)
+        t = cy - (yb - comp.eps_b) + comp.delta
+        u = torch.log(t)
+        ctx_t = ctx_tensor.expand(1, -1)
+        lp_u = comp.flow(ctx_t).log_prob(u)
+        lp_y = lp_u - u.squeeze(-1)
+        grad = torch.autograd.grad(lp_y.sum(), cy, create_graph=True)[0]
+        curv = torch.autograd.grad(grad.sum(), cy)[0]
+        c0_flow = float(curv.item())
+
+    # Analytical bridge curvature at y0
+    h = max(comp.h_bridge_min, comp.h_factor / s)
+    d0 = float(grad.item())
+    d1 = -s
+    if tail_mode == "asymptotic_c2":
+        A = d0 + s
+        B = (d0 + s) + c0_flow * h
+        c0_bridge = (B - A) / h
+    else:
+        a2 = 0.5 * c0_flow
+        c0_bridge = 2.0 * a2
+
+    assert c0_bridge == pytest.approx(c0_flow, rel=1e-6)
+

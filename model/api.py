@@ -15,14 +15,17 @@ class MagnificationPDF:
         "unit" enforces unit inverse-magnification moment <1/mu> = 1.0.
         "standard" enforces unit normalization integral p(mu) dmu = 1.0.
     tail_mode : str, default="asymptotic"
-        "asymptotic" (shipped default) uses the smooth C^inf relaxation approaching mu^-2 at rate O(1/mu).
-        "hermite" uses the C^1 cubic Hermite bridge matching mu^-2 at finite y1.
+        "asymptotic" (shipped production default) uses the C^1 smooth exponential relaxation
+        approaching mu^-2 at rate O(mu^-2) with relaxation scale h = alpha / s(c) (alpha = 0.50).
+        "asymptotic_c2" (or "c2") enforces continuous curvature (C^2) across y0.
+        "hermite_c2" uses the C^2 quartic Hermite bridge matching curvature c0 at y0 and zero curvature at y1.
+        "hermite" uses the legacy C^1 cubic Hermite bridge matching mu^-2 at finite y1.
     """
 
     def __init__(self, device="cpu", *, flux_mode="unit", tail_mode="asymptotic"):
         self.composite = SingleBodyComposite(device=device, flux_mode=flux_mode, tail_mode=tail_mode)
         self.flux_mode = flux_mode
-        self.tail_mode = tail_mode
+        self.tail_mode = self.composite.tail_mode
 
     def log_prob_lnmu(self, lnmu, z_s, theta):
         """Log probability density with respect to d ln(mu).

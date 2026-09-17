@@ -1,35 +1,56 @@
-"""Comprehensive test set evaluation module for production_model_v3.
+"""Comprehensive evaluation module for production model v3.
 
 Computes:
-1. ACE-Lensing benchmark-compatible KL divergence (cell-integrated, N >= 5)
-2. Equal-mass Quantile Adaptive KL divergence with Miller-Madow debiasing
-3. Total Variation Distance (TVS)
-4. Bin-free Wasserstein-1 distance in physical magnification W_1(mu) and y-space W_1(y)
-5. Bin-free Kolmogorov-Smirnov distance (D_KS = max |F_emp - F_mod|)
+1. ACE-Protocol KL divergence: 120 width-relative bins on y in [-6, 12] with N >= 5
+2. Equal-mass Quantile Adaptive KL divergence with Miller-Madow debiasing (K = 50)
+3. Total Variation Distance (TVS) on the width-relative grid
+4. Bin-free truncated Wasserstein-1 distance in physical magnification W_1(mu) on empirical support
+   (Note: because p(mu) ~ mu^-2 has a divergent first moment, full-distribution W_1 diverges;
+   this metric computes the truncated Wasserstein-1 distance conditioned on mu <= 1.05 * max(mu_sample))
+5. Bin-free Kolmogorov-Smirnov distance (D_KS = max |F_emp - F_mod| per context)
 6. Bin-free Cramér-von Mises distance (CvM)
-7. Continuous sample Negative Log-Likelihood (NLL)
+7. Continuous sample Negative Log-Likelihood (NLL) in normalized y-space
 """
 
 import argparse
+import csv
 import json
 import os
 import sys
 from pathlib import Path
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from flumen.model import load_model
 
-DATA_PATH = Path("/Users/baltabay/Desktop/gw-wl-emulator/single_body_naive/data/u_space/test.npz")
-OUT_PATH = Path(__file__).resolve().parent / "test_summary.json"
 
+def evaluate_split(
+    split="test",
+    data_path=None,
+    n_max=None,
+    device="cpu",
+    flux_mode="unit",
+    tail_mode="asymptotic",
+    seed=42,
+    output_path=None,
+    rows_output_path=None,
+):
+    if data_path is None:
+        data_path = ROOT / "data" / "u_space" / f"{split}.npz"
+    data_path = Path(data_path)
 
-def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
-    model = load_model(device=device, flux_mode=flux_mode)
+    if not data_path.exists():
+        raise FileNotFoundError(
+            f"Dataset for split '{split}' not found at {data_path}. "
+            f"Run 'python -m flumen.data.download' to verify or obtain datasets."
+        )
 
-    d = np.load(DATA_PATH)
+    model = load_model(device=device, flux_mode=flux_mode, tail_mode=tail_mode)
+
+    d = np.load(data_path)
     u_te, idx_te, ctx_te, meta_te = d["u"], d["idx"], d["ctx"], d["meta"]
 
     order = np.argsort(idx_te)
@@ -51,11 +72,12 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
     ks_list = []
     cvm_list = []
     nll_list = []
+    rows = []
 
-    # ACE protocol grid: 120 width-relative bins in y in [-6, 12]
+    # ACE protocol grid: 120 width-relative bins in y on [-6, 12]
     y_edges_ace = np.linspace(-6.0, 12.0, 121)
 
-    print(f"Evaluating {len(indices)} test configurations on ACE-KL, Quantile-KL, W_1, D_KS, and NLL...")
+    print(f"Evaluating {len(indices)} configurations ({split} split, flux_mode={flux_mode}, tail_mode={tail_mode})...")
     for idx_count, i in enumerate(indices):
         ui = u_s[st[i]:en[i]].astype(np.float64)
         m_true, s_true, yb_true = meta_te[i, 0], meta_te[i, 1], meta_te[i, 2]
@@ -70,11 +92,11 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
             float(ctx_te[i, 3]),
             float(ctx_te[i, 4]),
             float(ctx_te[i, 5]),
-            float(ctx_te[i, 6] * 1000.0),
+            float(ctx_te[i, 6] * 1000.0 if ctx_te[i, 6] < 100.0 else ctx_te[i, 6]),
         )
 
         # -------------------------------------------------------------
-        # 1. ACE-Compatible Protocol KL (cell-integrated, N >= 5)
+        # 1. ACE-Protocol KL (120 width-relative bins on y, N >= 5)
         # -------------------------------------------------------------
         counts_ace, _ = np.histogram(yi, bins=y_edges_ace)
         valid_ace = counts_ace >= 5
@@ -120,7 +142,7 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
         kl_quant_list.append(kl_q_debiased)
 
         # -------------------------------------------------------------
-        # 3. Continuous Bin-Free CDF: KS Distance & Wasserstein-1
+        # 3. Continuous Bin-Free CDF: KS Distance & Truncated Wasserstein-1
         # -------------------------------------------------------------
         mu_edge = np.exp(m_true + s_true * (yb_true - 0.02 - 0.05))
         mu_max = float(np.max(mui) * 1.05)
@@ -135,7 +157,7 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
         u_eval = np.interp(mu_sorted, mu_dense, cdf_dense)
         emp_cdf = (np.arange(1, N + 1)) / N
 
-        # Kolmogorov-Smirnov distance
+        # Kolmogorov-Smirnov distance (max CDF error for this context)
         ks_dist = float(np.max(np.abs(emp_cdf - u_eval)))
         ks_list.append(ks_dist)
 
@@ -143,13 +165,13 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
         cvm = float(1.0 / (12.0 * N) + np.sum((u_eval - (2.0 * np.arange(1, N + 1) - 1.0) / (2.0 * N)) ** 2) / N)
         cvm_list.append(cvm)
 
-        # Wasserstein-1 distance in physical mu
+        # Truncated Wasserstein-1 distance on sample support [mu_cut, 1.05 * mu_max]
         target_quantiles = (np.arange(1, N + 1) - 0.5) / N
         model_quantiles = np.interp(target_quantiles, cdf_dense, mu_dense)
         w1_mu = float(np.mean(np.abs(mu_sorted - model_quantiles)))
         w1_mu_list.append(w1_mu)
 
-        # Wasserstein-1 distance in normalized y
+        # Truncated Wasserstein-1 distance in normalized y
         y_target_q = (np.log(model_quantiles) - m_true) / s_true
         y_sorted = np.sort(yi)
         w1_y = float(np.mean(np.abs(y_sorted - y_target_q)))
@@ -161,27 +183,50 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
         lnmu_rays = m_true + s_true * yi
         lp_rays = model.log_prob_lnmu(lnmu_rays, z_s=z_s, theta=theta)
         lp_y_rays = lp_rays + np.log(s_true)
-        nll_list.append(float(-np.mean(lp_y_rays)))
+        finite_lp = lp_y_rays[np.isfinite(lp_y_rays)]
+        mean_nll = float(-np.mean(finite_lp)) if len(finite_lp) > 0 else float("inf")
+        nll_list.append(mean_nll)
 
-        if (idx_count + 1) % 50 == 0 or (idx_count + 1) == len(indices):
+        rows.append({
+            "split": split,
+            "configuration_index": int(i),
+            "z_s": z_s,
+            "h": theta[0],
+            "OmegaM": theta[1],
+            "sigma8": theta[2],
+            "OmegaB": theta[3],
+            "ns": theta[4],
+            "zeq": theta[5],
+            "kl_ace": kl_ace,
+            "kl_quant": kl_q_debiased,
+            "tvs": tv,
+            "w1_mu_truncated": w1_mu,
+            "w1_y": w1_y,
+            "d_ks": ks_dist,
+            "cvm": cvm,
+            "nll_y": mean_nll,
+        })
+
+        if (idx_count + 1) % 100 == 0 or (idx_count + 1) == len(indices):
             print(
                 f"  [{idx_count + 1:>4}/{len(indices)}] "
                 f"KL_ACE med: {np.median(kl_ace_list):.5f} | "
                 f"KL_quant med: {np.median(kl_quant_list):.5f} | "
-                f"W1(mu) med: {np.median(w1_mu_list):.5f} | "
+                f"W1_trunc med: {np.median(w1_mu_list):.5f} | "
                 f"D_KS med: {np.median(ks_list)*100:.2f}%"
             )
 
     results = {
+        "split": split,
         "n_configs": len(indices),
-        # 1. ACE-Compatible Protocol KL
+        # 1. ACE-Protocol KL (120-bin relative-y, N >= 5)
         "kl_ace_median": float(np.median(kl_ace_list)),
         "kl_ace_p90": float(np.percentile(kl_ace_list, 90)),
         "kl_ace_p99": float(np.percentile(kl_ace_list, 99)),
         "kl_ace_max": float(np.max(kl_ace_list)),
         "kl_ace_mean": float(np.mean(kl_ace_list)),
-        "ace_published_median_kl": 0.0069,
-        # 2. Quantile Adaptive KL
+        "ace_published_reference_kl": 0.00690,
+        # 2. Quantile Adaptive KL (K = 50, Miller-Madow debiased)
         "kl_quant_median": float(np.median(kl_quant_list)),
         "kl_quant_p90": float(np.percentile(kl_quant_list, 90)),
         "kl_quant_max": float(np.max(kl_quant_list)),
@@ -189,12 +234,13 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
         "tvs_median": float(np.median(tv_list)),
         "tvs_p90": float(np.percentile(tv_list, 90)),
         "tvs_max": float(np.max(tv_list)),
-        # 4. Continuous Wasserstein-1 Distance
+        # 4. Truncated Wasserstein-1 Distance (on empirical magnification support)
+        "w1_mu_truncated_median": float(np.median(w1_mu_list)),
+        "w1_mu_truncated_p90": float(np.percentile(w1_mu_list, 90)),
+        "w1_mu_truncated_max": float(np.max(w1_mu_list)),
         "w1_mu_median": float(np.median(w1_mu_list)),
-        "w1_mu_p90": float(np.percentile(w1_mu_list, 90)),
-        "w1_mu_max": float(np.max(w1_mu_list)),
         "w1_y_median": float(np.median(w1_y_list)),
-        # 5. Continuous Kolmogorov-Smirnov Distance
+        # 5. Continuous Kolmogorov-Smirnov Distance (per-context max CDF error)
         "ks_median": float(np.median(ks_list)),
         "ks_p90": float(np.percentile(ks_list, 90)),
         "ks_max": float(np.max(ks_list)),
@@ -206,29 +252,63 @@ def evaluate_test_set(n_max=200, device="cpu", flux_mode="unit", seed=42):
     }
 
     print("\n======================= COMPREHENSIVE BENCHMARK SUMMARY =======================")
-    print(f"Configurations Evaluated: {results['n_configs']}")
+    print(f"Configurations Evaluated: {results['n_configs']} ({split} split)")
     print("-" * 75)
-    print(f"ACE-Protocol KL (nats):       Median = {results['kl_ace_median']:.5f}  (ACE Paper published: 0.00690)")
-    print(f"                             90th % = {results['kl_ace_p90']:.5f} | Max = {results['kl_ace_max']:.5f}")
+    print(f"ACE-Protocol KL (nats):       Median = {results['kl_ace_median']:.5f} (comparable to ACE published 0.00690)")
+    print(f"                             90th % = {results['kl_ace_p90']:.5f} | Test Max = {results['kl_ace_max']:.5f}")
     print(f"Quantile Adaptive KL (nats):  Median = {results['kl_quant_median']:.5f} | 90th % = {results['kl_quant_p90']:.5f}")
-    print(f"Total Variation Distance (%): Median = {results['tvs_median']*100:.2f}% | 90th % = {results['tvs_p90']*100:.2f}%")
+    print(f"Total Variation Distance (%): Median = {results['tvs_median']*100:.2f}% | Test Max = {results['tvs_max']*100:.2f}%")
     print("-" * 75)
-    print(f"Wasserstein-1 W_1(mu):        Median = {results['w1_mu_median']:.6f} | 90th % = {results['w1_mu_p90']:.6f}")
-    print(f"                              (Mean physical magnification displacement)")
-    print(f"Kolmogorov-Smirnov D_KS (%):  Median = {results['ks_median']*100:.2f}% | 90th % = {results['ks_p90']*100:.2f}%")
-    print(f"                              (Maximum cumulative probability error)")
+    print(f"Truncated W_1(mu):            Median = {results['w1_mu_truncated_median']:.6f} | 90th % = {results['w1_mu_truncated_p90']:.6f}")
+    print(f"                              (Mean magnification error on empirical support mu <= 1.05 * mu_max)")
+    print(f"Kolmogorov-Smirnov D_KS (%):  Median = {results['ks_median']*100:.2f}% | 90th % = {results['ks_p90']*100:.2f}% | Test Max = {results['ks_max']*100:.2f}%")
+    print(f"                              (Context-median of max cumulative probability error)")
     print(f"Ray-by-Ray NLL (y-space):     Median = {results['nll_y_median']:.4f} nats | Mean = {results['nll_y_mean']:.4f} nats")
     print("===============================================================================")
 
-    with open(OUT_PATH, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"[done] saved results to {OUT_PATH}")
+    if output_path is not None:
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"[done] saved summary to {output_path}")
+
+    if rows_output_path is not None and rows:
+        rows_output_path = Path(rows_output_path)
+        rows_output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(rows_output_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"[done] saved per-context results to {rows_output_path}")
+
     return results
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--n_max", type=int, default=200, help="Number of configs to evaluate (default 200)")
+def main():
+    parser = argparse.ArgumentParser(description="Evaluate flumen model on validation or test split.")
+    parser.add_argument("--split", choices=("test", "validation"), default="test", help="Dataset split to evaluate")
+    parser.add_argument("--data_path", type=Path, default=None, help="Explicit path to split .npz file")
+    parser.add_argument("--n_max", type=int, default=None, help="Number of configs to evaluate (default: all)")
     parser.add_argument("--flux_mode", type=str, default="unit", choices=["unit", "standard"])
+    parser.add_argument("--tail_mode", type=str, default="asymptotic", choices=["asymptotic", "hermite"])
+    parser.add_argument("--output", type=Path, default=None, help="Output JSON path for summary results")
+    parser.add_argument("--rows_output", type=Path, default=None, help="Output CSV path for per-context rows")
     args = parser.parse_args()
-    evaluate_test_set(n_max=args.n_max, flux_mode=args.flux_mode)
+
+    default_out = ROOT / "evaluation" / "results" / "test_summary.json" if args.split == "test" else ROOT / "evaluation" / "results" / "validation_summary.json"
+    out_file = args.output if args.output is not None else default_out
+
+    evaluate_split(
+        split=args.split,
+        data_path=args.data_path,
+        n_max=args.n_max,
+        flux_mode=args.flux_mode,
+        tail_mode=args.tail_mode,
+        output_path=out_file,
+        rows_output_path=args.rows_output,
+    )
+
+
+if __name__ == "__main__":
+    main()

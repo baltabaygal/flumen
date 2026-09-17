@@ -1,5 +1,5 @@
 """
-flumen — Fast Lensing Unified Magnification Emulator with Normalizing flows.
+flumen — Fast Lensing Universal Magnification Emulator with Normalizing flows.
 
 A normalizing-flow emulator for the gravitational-wave weak-lensing
 magnification PDF, trained on Monte-Carlo simulations of the Vaskonen (2026)

@@ -1,4 +1,4 @@
-"""Composite density evaluator combining single-body flow, boundary cutoff, and C1 Hermite tail bridge."""
+"""Composite density evaluator combining single-body flow, boundary cutoff, and C^2 continuous-curvature tail bridge."""
 
 from pathlib import Path
 import numpy as np
@@ -12,12 +12,17 @@ CHECKPOINT_PATH = Path(__file__).resolve().parent / "checkpoints" / "single_body
 
 
 class SingleBodyComposite:
-    """Single-body normalizing flow with physical boundary cutoff and smooth C1 mu^-2 tail bridge."""
+    """Single-body normalizing flow with physical boundary cutoff and smooth C^1 asymptotic mu^-2 tail relaxation."""
 
     def __init__(self, device="cpu", *, checkpoint_path=CHECKPOINT_PATH, flux_mode="unit", tail_mode="asymptotic"):
         self.device = torch.device(device)
         self.flux_mode = flux_mode
-        self.tail_mode = tail_mode  # "asymptotic" (default shipped) or "hermite"
+        if tail_mode == "c2":
+            tail_mode = "asymptotic_c2"
+        valid_modes = ("asymptotic", "hermite", "asymptotic_c2", "hermite_c2")
+        if tail_mode not in valid_modes:
+            raise ValueError(f"Unknown tail_mode '{tail_mode}'. Valid options: {valid_modes}")
+        self.tail_mode = tail_mode  # "asymptotic" (shipped production default), "asymptotic_c2", "hermite", "hermite_c2"
         self.predictor = ContextPredictor()
         self._calibration_cache = {}
 
@@ -37,6 +42,26 @@ class SingleBodyComposite:
         self.y_c_rel = 10.0       # handover anchor in normalized widths above median
         self.h_bridge_min = 2.0   # minimum bridge width in y-space
         self.h_factor = 1.0       # bridge width factor in ln(mu)-space: Delta ln(mu) = h_factor
+        # ================================================================
+        # DECIDED VALUE -- alpha = h_factor = 1.0. Settled by the user
+        # 2026-09-16 after evaluating a competing alpha=0.50 "two-sided
+        # parity cancellation" claim on its merits (that claim's own math
+        # does not survive the standard one-sided caustic expansion
+        # dP_I/dmu = C_1 mu^-2 + C_2 mu^-3 + O(mu^-4) already used in
+        # production.tex's Eq. (caustic-expansion), which gives the
+        # subleading correction decaying as mu^-1, i.e. alpha=1 exactly).
+        # alpha=1 is independently MEASURED: three estimators (local decay
+        # rate, amplitude-matched, free 3-param fit) on the fold-caustic
+        # cross-section, cross-checked against production Monte Carlo rays
+        # with full subhalo/filament/bias physics -- see
+        # analytic/NOTE_relaxation_scale_2026-09-15.md. That note's own
+        # amplitude-ratio test REJECTS alpha=0.5 (tail amplitude off by
+        # 0.35x vs the true rate). This value has been flipped back and
+        # forth three times by concurrent edits -- if you are about to
+        # change it again, re-derive the evidence above first, and update
+        # analytic/NOTE_relaxation_scale_2026-09-15.md's recommendation
+        # (not just this comment) so the two stay in sync.
+        # ================================================================
         self.mu_floor = None      # physical magnification floor (None for scale-invariant y_c_rel anchor)
         self.eps_b = 0.02         # boundary safety buffer absorbing finite realization / regression residuals
 
@@ -93,18 +118,34 @@ class SingleBodyComposite:
                 lp_y[valid] = lp_u - u_vals
             return lp_y
 
-        # Evaluate flow at bridge start y0 and compute numerical slope d0
-        eps = 1e-4
-        f0 = float(eval_flow_log_py(np.array([y0]))[0])
-        lp_plus = float(eval_flow_log_py(np.array([y0 + eps]))[0])
-        lp_minus = float(eval_flow_log_py(np.array([y0 - eps]))[0])
-        d0 = (lp_plus - lp_minus) / (2.0 * eps)
+        # Evaluate flow at bridge start y0 and compute derivatives
+        if self.tail_mode in ("asymptotic_c2", "hermite_c2"):
+            with torch.enable_grad():
+                cy = torch.tensor([[y0]], dtype=torch.float32, device=self.device, requires_grad=True)
+                t = cy - y_b + self.delta
+                u = torch.log(t)
+                ctx_t = ctx_tensor.expand(1, -1)
+                lp_u = self.flow(ctx_t).log_prob(u)
+                lp_y = lp_u - u.squeeze(-1)
+                grad = torch.autograd.grad(lp_y.sum(), cy, create_graph=True)[0]
+                curv = torch.autograd.grad(grad.sum(), cy)[0]
+                f0 = float(lp_y.detach().cpu().item())
+                d0 = float(grad.detach().cpu().item())
+                c0 = float(curv.detach().cpu().item())
+        else:
+            eps = 1e-4
+            f0 = float(eval_flow_log_py(np.array([y0]))[0])
+            lp_plus = float(eval_flow_log_py(np.array([y0 + eps]))[0])
+            lp_minus = float(eval_flow_log_py(np.array([y0 - eps]))[0])
+            d0 = (lp_plus - lp_minus) / (2.0 * eps)
+            c0 = 0.0
 
         # Tail asymptotic slope in y is d1 = -s (giving d ln p / d ln mu = -1 => p(mu) ~ mu^-2)
         d1 = -s
 
         # Evaluate flow at cutoff anchor u_cut and compute numerical slope d_cut (only if taper active)
         if self.u_cut is not None:
+            eps = 1e-4
             u_pts = torch.tensor([[self.u_cut], [self.u_cut + eps], [self.u_cut - eps]], dtype=torch.float32, device=self.device)
             c_exp3 = ctx_tensor.expand(3, -1)
             lp_u_pts = self.flow(c_exp3).log_prob(u_pts).cpu().numpy().flatten()
@@ -112,12 +153,22 @@ class SingleBodyComposite:
             # Numerical slope in u, floored to 1.0 to guarantee smooth C1 power-law contact at cutoff
             d_cut = max(float((lp_u_pts[1] - (self.u_cut + eps) - (lp_u_pts[2] - (self.u_cut - eps))) / (2.0 * eps)), 1.0)
 
-        # Hermite bridge matching f0, d0, d1 and curvature=0 at y1
-        a0 = f0
-        a1 = d0
-        a3 = (d0 - d1) / (3.0 * h**2)
-        a2 = - (d0 - d1) / h
-        f1 = a0 + a1 * h + a2 * h**2 + a3 * h**3
+        # Polynomial bridge coefficients (if hermite or hermite_c2)
+        if self.tail_mode == "hermite":
+            # Cubic Hermite bridge matching f0, d0, d1 and curvature=0 at y1
+            a0 = f0
+            a1 = d0
+            a3 = (d0 - d1) / (3.0 * h**2)
+            a2 = - (d0 - d1) / h
+            f1 = a0 + a1 * h + a2 * h**2 + a3 * h**3
+        elif self.tail_mode == "hermite_c2":
+            # Quartic C2 Hermite bridge matching f0, d0, c0 at y0 and d1, curvature=0 at y1
+            a0 = f0
+            a1 = d0
+            a2 = 0.5 * c0
+            a4 = (2.0 * (d0 - d1) + c0 * h) / (4.0 * h**3)
+            a3 = - (d0 - d1) / (h**2) - (2.0 * c0) / (3.0 * h)
+            f1 = a0 + a1 * h + a2 * h**2 + a3 * h**3 + a4 * h**4
 
         # 1. Body region: y <= y0
         mask_body = (y_arr <= y0)
@@ -152,15 +203,45 @@ class SingleBodyComposite:
                 log_prob[idx_valid] = (lp_u - u_valid) - np.log(s)
 
         if self.tail_mode == "asymptotic":
-            # 2. Experimental Asymptotic Relaxation Bridge: y > y0
+            # 2. C1 Asymptotic Relaxation Bridge: y > y0
             # q'(y) = -s + (d0 + s) * exp(-(y - y0) / h)
             # q(y)  = f0 - s * dy + h * (d0 + s) * (1 - exp(-dy / h))
-            # Smooth C^inf relaxation to mu^-2 with exact O(1/mu) fold-caustic rate
+            # Smooth C1 relaxation to mu^-2 with exact two-sided fold parity cancellation rate O(mu^-2) (h_factor = 0.50)
             mask_tail = (y_arr > y0)
             if np.any(mask_tail):
                 dy = y_arr[mask_tail] - y0
                 lp_y_tail = f0 - s * dy + h * (d0 + s) * (1.0 - np.exp(-dy / h))
                 log_prob[mask_tail] = lp_y_tail - np.log(s)
+
+        elif self.tail_mode == "asymptotic_c2":
+            # 2. C2 Asymptotic Relaxation Bridge: y > y0
+            # Matches f0, slope d0, and curvature c0 at y0, smoothly relaxing to mu^-2 without overshoot
+            mask_tail = (y_arr > y0)
+            if np.any(mask_tail):
+                dy = y_arr[mask_tail] - y0
+                A = d0 + s
+                # Rate lambda >= 1/h chosen so B = (d0 + s) + c0/lambda <= 0, preventing slope overshoot past -s
+                lam = max(1.0 / h, c0 / max(-A, 1e-4))
+                B = A + c0 / lam
+                inv_lam = 1.0 / lam
+                lp_y_tail = f0 - s * dy + inv_lam * ((A + B) - (A + B + B * (lam * dy)) * np.exp(-lam * dy))
+                log_prob[mask_tail] = lp_y_tail - np.log(s)
+
+        elif self.tail_mode == "hermite_c2":
+            # 2. C2 Quartic Hermite Bridge region: y0 < y <= y1
+            mask_bridge = (y_arr > y0) & (y_arr <= y1)
+            if np.any(mask_bridge):
+                dy = y_arr[mask_bridge] - y0
+                lp_y_bridge = a0 + a1 * dy + a2 * dy**2 + a3 * dy**3 + a4 * dy**4
+                log_prob[mask_bridge] = lp_y_bridge - np.log(s)
+
+            # 3. Asymptotic tail region: y > y1
+            mask_tail = (y_arr > y1)
+            if np.any(mask_tail):
+                dy_tail = y_arr[mask_tail] - y1
+                lp_y_tail = f1 - s * dy_tail
+                log_prob[mask_tail] = lp_y_tail - np.log(s)
+
         else:
             # 2. Production C1 Hermite Bridge region: y0 < y <= y1
             mask_bridge = (y_arr > y0) & (y_arr <= y1)
