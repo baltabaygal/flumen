@@ -159,14 +159,14 @@ Training reads the $u$-space data bundled under `data/u_space/`. See `PROVENANCE
 If you use `flumen` in your research, please cite:
 
 ```bibtex
-@article{baltabay2026learning,
-  author        = {Baltabay, Galymzhan and Vaskonen, Ville},
-  title         = {Learning Weak Lensing Magnifications},
-  journal       = {arXiv preprint arXiv:XXXX.XXXXX},
-  year          = {2026},
-  archivePrefix = {arXiv},
-  eprint        = {XXXX.XXXXX},
-  primaryClass  = {astro-ph.CO}
+@article{Baltabay:2026nmz,
+    author = "Baltabay, Galymzhan and Vaskonen, Ville",
+    title = "{FLUMEN: Neural Emulator of an Advanced Stochastic Weak Lensing Model}",
+    eprint = "2609.21806",
+    archivePrefix = "arXiv",
+    primaryClass = "astro-ph.CO",
+    month = "9",
+    year = "2026"
 }
 ```
 
