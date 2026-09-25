@@ -171,3 +171,5 @@ If you use `flumen` in your research, please cite:
 ```
 
 The underlying Monte-Carlo lensing simulator is described in [vianvask/halos](https://github.com/vianvask/halos).
+
+You can contact me at galymzhan.baltabay@kbfi.ee.
