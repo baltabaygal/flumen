@@ -51,3 +51,29 @@ Because the model enforces the physical asymptotic power-law tail $p(\mu) \propt
 - Single-image approximation: Extreme strong-lensing multiple-image micro-interference is outside model scope.
 - Sub-cutoff extinction: Densities strictly vanish below the physical empty-beam bound ($\mu < \mu_{\text{cutoff}} = 1/(1+\bar{\kappa})^2$).
 - Retention measure: Unit inverse-mean flux $\langle 1/\mu \rangle = 1$ is calibrated and certified on the retained-ray simulation measure.
+
+
+## 6. Analytic backend (`backend="analytic"`, 2026-10-20)
+
+- **What it emulates.** The semi-analytic compound-Poisson chain of `stochastic_wl_analytic`, draft-paper model
+  (`run_full_chain.run(zs, "full")`: r200 halo edges, ODE growth, radiation, $\xi_{\rm lin}$ Gaussian clustering, exact
+  moment subhalos, filaments, pseudo-elliptical halos), at the training resolution "aggr2p" (≤ 0.3% of the peak from
+  the converged chain). Native quantity: the source-plane PDF.
+- **Training data.** 3,903 deterministic PDFs, $z_s\in[0.5,12]$, 10 parameters
+  $(z_s, h, \Omega_m, \sigma_8, \Omega_b, n_s, z_{\rm eq}, \Omega_K, w_0, w_a)$, optimised LHS with rejection on the
+  dark-energy domain; checkerboard split 1,939 / 982 / 982. Fourier-inversion artifacts removed before training
+  (no smoothing inside the trusted range; smooth cutoff and $\mu^{-2}$ tail outside it).
+- **Model.**
+  - Context: MLP ensemble, 5 members × 3 × 128.
+  - Body: NSF flow (zuko; 3 transforms, 2 × 128, 16 bins, Gaussian base) in $u=\ln(y-y_b+0.2)$. Its context is the 10
+    parameters plus the predicted (ln s, m/s, y_b). Two seeds, mixture. Final model trained on train + validation,
+    stop at epoch 1100.
+  - Edge guard: the log-quadratic law below $10^{-8}$ of the peak.
+  - Tail: the hybrid $\mu^{-2}$ law, C¹ at the join, ±0.15 smoothstep blend.
+- **Test accuracy** (982 configs, once): see README; per $z_s$ band
+  0.5–1 / 1–3 / 3–6 / 6–12: max $|\Delta P|$/peak 1.0 / 0.65 / 0.37 / 0.37% (median).
+- **Limitations.**
+  - $z_s<0.5$ is not covered.
+  - The far tail at $z_s\lesssim1$ is only as converged as the chain (10–30% beyond $\ln\mu\approx3$).
+  - A small curvature feature at $y=10$ widths (≤ 0.4% in ln P) remains until the next retrain.
+  - The model is not the MC engine's: no unit-flux calibration, and different halo truncation.
