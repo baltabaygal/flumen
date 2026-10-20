@@ -27,6 +27,16 @@ limitations, and `PROVENANCE.md` for checkpoint lineage.
 - **Total Variation (TVS)**: **3.37% median** across contexts (test-split maximum $8.48\%$ on the 1,089 held-out configurations)
 - **Latency**: **~22 ms / eval on CPU** (single flow body, 5.9x faster than multi-body blends)
 
+These metrics are measured in the image plane, the measure of the Monte-Carlo rays the MC backend was trained on.
+
+## Changes in 0.4.0
+
+- `generate_pdf` / `generate_pdf_lnmu` return the **source-plane** PDF by default (sources at random positions, the one
+  for standard sirens); `plane="image"` restores the 0.3 behaviour. The low-level `model.MagnificationPDF` is
+  unchanged (image plane), so FLUMEN's evaluation code and figures are unaffected.
+- New `backend="analytic"`: an emulator of the semi-analytic chain, with curvature and CPL dark energy (`Ok`, `w0`,
+  `wa`). See below and `docs/MODEL_CARD.md` section 6.
+
 ## Install
 
 ```bash
@@ -57,11 +67,12 @@ import numpy as np
 mu, pdf = flumen.generate_pdf(z_s=1.0, mu=np.geomspace(0.5, 15.0, 1000))
 ```
 
-> **Which plane? (read this for standard sirens.)** `generate_pdf` returns the **image-plane** PDF by default
-> (`plane="image"`, both backends). Use the **source-plane** PDF, `plane="source"`
+> **Which plane?** Since 0.4.0 `generate_pdf` returns the **source-plane** PDF by default (both backends): sources at
+> random positions, the one for standard sirens. Use `plane="image"` for the PDF over random lines of sight (the
+> measure of the Monte-Carlo rays, and the default up to 0.3).
 >
 > ```python
-> mu, p_src = flumen.generate_pdf(z_s=2.0, plane="source")        # source plane, for sirens
+> mu, p_img = flumen.generate_pdf(z_s=2.0, plane="image")          # image plane, random lines of sight
 > ```
 
 `mu` and `pdf` are plain `numpy.ndarray`s of the same shape; `pdf` is
@@ -86,13 +97,13 @@ dark energy:
 ```python
 mu, pdf = flumen.generate_pdf(z_s=2.0, backend="analytic")                          # Planck-like, flat LCDM
 mu, pdf = flumen.generate_pdf(z_s=2.0, backend="analytic", Ok=-0.05, w0=-0.9, wa=-0.3)
-lnmu, p_src = flumen.generate_pdf_lnmu(z_s=2.0, backend="analytic", plane="source")
+lnmu, p_img = flumen.generate_pdf_lnmu(z_s=2.0, backend="analytic", plane="image")
 ```
 
-- **Planes.** `plane="image"` (default, both backends) is the PDF over random lines of sight, the measure of the
-  Monte-Carlo engine; `plane="source"` is the PDF over random source positions,
-  $P_S(\mu) = P_I(\mu)/(\mu\langle 1/\mu\rangle_I)$, the relevant one for standard sirens. The analytic chain is native
-  in the source plane (tail $P_S(\ln\mu)\propto\mu^{-2}$; image plane $\propto\mu^{-1}$).
+- **Planes.** `plane="source"` (default, both backends) is the PDF over random source positions, the relevant one for
+  standard sirens; `plane="image"` is the PDF over random lines of sight, the measure of the Monte-Carlo engine,
+  $P_I(\mu) = \mu P_S(\mu)\langle 1/\mu\rangle_I$. The analytic chain is native in the source plane (tail
+  $P_S(\ln\mu)\propto\mu^{-2}$; image plane $\propto\mu^{-1}$).
 - **Validity box** `flumen.ANALYTIC_TRAINING_RANGE`: $z_s\in[0.5,12]$, $h\in[0.55,0.85]$, $\Omega_K\in[-0.15,0.05]$,
   $w_0\in[-1.5,0.5]$, $w_a\in[-2,1]$ with $w_0+w_a<0$ and an early dark-energy cap; the other ranges as for the MC backend.
 - **Architecture.** MLP ensemble for width, location, empty-beam cutoff and $\mu^{-2}$ tail amplitude; a conditional

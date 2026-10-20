@@ -77,6 +77,8 @@ Because the model enforces the physical asymptotic power-law tail $p(\mu) \propt
   - The far tail at $z_s\lesssim1$ is only as converged as the chain (10–30% beyond $\ln\mu\approx3$).
   - A small curvature feature at $y=10$ widths (≤ 0.4% in ln P) remains until the next retrain.
   - The model is not the MC engine's: no unit-flux calibration, and different halo truncation.
-- **Plane (both backends).** `generate_pdf` defaults to the image plane (random lines of sight, $\langle1/\mu\rangle=1$),
-  kept for backward compatibility. For standard sirens (sources at random positions, before detection selection) use
-  `plane="source"`; the image-plane PDF is biased toward magnification by about ${\rm Var}(\ln\mu)$.
+- **Plane (both backends).** Since 0.4.0 `generate_pdf` defaults to the source plane (random source positions, the
+  one for standard sirens before detection selection). `plane="image"` gives the PDF over random lines of sight
+  ($\langle1/\mu\rangle=1$), the default up to 0.3, which is biased toward magnification by about ${\rm Var}(\ln\mu)$.
+  `model.MagnificationPDF` remains the image-plane emulator of the MC rays; its accuracy figures (section 4) are in
+  that plane.

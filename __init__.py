@@ -22,15 +22,21 @@ Backends
 --------
 ``backend="mc"`` (default): the normalizing-flow emulator of the Vaskonen (2026) Monte-Carlo engine, flat LCDM.
 ``backend="analytic"``: an emulator of the semi-analytic compound-Poisson chain (stochastic_wl_analytic), which also
-takes ``Ok``, ``w0``, ``wa``. ``plane="image"`` (default; random lines of sight, the MC engine's measure) or
-``plane="source"`` (random source positions). See ``docs/MODEL_CARD.md`` section "Analytic backend".
+takes ``Ok``, ``w0``, ``wa``. See ``docs/MODEL_CARD.md`` section "Analytic backend".
+
+Planes (changed in 0.4.0)
+-------------------------
+``plane="source"`` (DEFAULT since 0.4.0): the PDF over random source positions, the one for standard sirens (before
+detection selection). ``plane="image"``: the PDF over random lines of sight, the measure of the Monte-Carlo rays and the
+default of flumen <= 0.3; P_S(mu) = P_I(mu) / (mu <1/mu>_I). The low-level classes keep their native planes:
+``model.MagnificationPDF`` = image plane (MC rays), ``model.AnalyticPDF`` = source plane by default.
 """
 
 import numpy as np
 
 from .model import load_analytic_model, load_model
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __all__ = ["generate_pdf", "generate_pdf_lnmu", "get_model", "TRAINING_RANGE", "ANALYTIC_TRAINING_RANGE",
            "__version__"]
 
@@ -130,11 +136,16 @@ def _evaluate(z_s, cosmo, x, density, device, flux_mode, tail_mode, warn_out_of_
     theta = (h, Om, sigma8, Ob, ns, zeq / 1000.0)
     pdf = model.pdf_mu(x, z_s=z_s, theta=theta) if density == "mu" else model.pdf_lnmu(x, z_s=z_s, theta=theta)
     if plane == "source":
-        # P_S = P_I / (mu <1/mu>_I); exact under the unit-flux calibration (<1/mu>_I = 1)
-        if flux_mode != "unit":
-            raise ValueError("plane='source' with the MC backend needs flux_mode='unit'")
-        pdf = pdf / (x if density == "mu" else np.exp(x))
+        # P_S = P_I / (mu <1/mu>_I); <1/mu>_I = 1 exactly under the unit-flux calibration, by quadrature otherwise
+        inv_mu = 1.0 if flux_mode == "unit" else _mc_inverse_mu(model, z_s, theta)
+        pdf = pdf / ((x if density == "mu" else np.exp(x)) * inv_mu)
     return pdf
+
+
+def _mc_inverse_mu(model, z_s, theta):
+    """<1/mu> of the MC backend's image-plane PDF (needed for the source plane when flux_mode != "unit")."""
+    x = np.linspace(-3.0, 12.0, 120001)
+    return float(np.trapezoid(model.pdf_lnmu(x, z_s=z_s, theta=theta) * np.exp(-x), x))
 
 
 def generate_pdf(
@@ -154,7 +165,7 @@ def generate_pdf(
     tail_mode="asymptotic",
     warn_out_of_range=True,
     backend="mc",
-    plane="image",
+    plane="source",
     Ok=0.0,
     w0=-1.0,
     wa=0.0,
@@ -200,10 +211,10 @@ def generate_pdf(
         "analytic": the emulator of the semi-analytic chain; accepts ``Ok``, ``w0``,
         ``wa``; ``flux_mode`` and ``tail_mode`` do not apply to it.
     plane : str, optional
-        "image" (default, kept for backward compatibility): random lines of sight, the measure of the MC engine
-        (<1/mu> = 1). "source": random source positions, P_S(mu) = P_I(mu) / (mu <1/mu>_I) -- use this for
-        standard sirens (sources at random positions, before detection selection). The image-plane PDF is shifted
-        toward magnification by about Var(ln mu) (<ln mu> +0.010 vs -0.009 at z_s = 2, Planck-like).
+        "source" (default since 0.4.0): random source positions -- the PDF for standard sirens (before
+        detection selection), P_S(mu) = P_I(mu) / (mu <1/mu>_I). "image": random lines of sight, the measure of
+        the MC rays (<1/mu> = 1 under flux_mode="unit") and the default of flumen <= 0.3. The image-plane PDF is
+        shifted toward magnification by about Var(ln mu) (<ln mu> +0.010 vs -0.009 at z_s = 2, Planck-like).
     Ok, w0, wa : float, optional
         Curvature and CPL dark-energy parameters (analytic backend only).
         Defaults 0, -1, 0.
@@ -249,13 +260,13 @@ def generate_pdf_lnmu(
     tail_mode="asymptotic",
     warn_out_of_range=True,
     backend="mc",
-    plane="image",
+    plane="source",
     Ok=0.0,
     w0=-1.0,
     wa=0.0,
 ):
-    """Same as :func:`generate_pdf`, but on the ln(mu) grid/density. Image plane by default; pass
-    ``plane="source"`` for sources at random positions (standard sirens).
+    """Same as :func:`generate_pdf`, but on the ln(mu) grid/density. Source plane by default (since 0.4.0);
+    ``plane="image"`` for random lines of sight.
 
     Returns ``(lnmu, pdf_lnmu)`` where ``pdf_lnmu`` is the density with
     respect to ``d ln(mu)`` (integrates to 1 over ``lnmu``).

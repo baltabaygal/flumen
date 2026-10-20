@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flumen"
-version = "0.3.0"
+version = "0.4.0"
 description = "Fast Lensing Universal Magnification Emulator with Normalizing flows -- a conditional GW weak-lensing magnification PDF emulator"
 readme = "README.md"
 license = {text = "MIT"}

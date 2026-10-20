@@ -14,7 +14,8 @@ import numpy as np
 
 import flumen
 
-# Fiducial cosmology, only z_s is required.
+# Fiducial cosmology, only z_s is required. Source-plane PDF by default (since 0.4.0: sources at random
+# positions, e.g. standard sirens); plane="image" gives the PDF over random lines of sight.
 mu, pdf = flumen.generate_pdf(z_s=1.0)
 print(f"peak mu = {mu[pdf.argmax()]:.3f}, integral = {np.trapezoid(pdf, mu):.6f}")
 

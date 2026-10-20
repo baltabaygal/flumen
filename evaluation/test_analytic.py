@@ -100,22 +100,28 @@ def test_mc_backend_rejects_curvature_and_dark_energy():
         flumen.generate_pdf(z_s=1.0, Ok=0.01)
 
 
-def test_mc_backend_default_unchanged_and_source_plane():
+def test_mc_backend_planes():
+    """Since 0.4.0 generate_pdf returns the source plane by default; plane="image" is the low-level MC class."""
     model_mc = load_model(device="cpu", flux_mode="unit")
-    mu = np.geomspace(0.5, 20.0, 500)
-    _, pdf = flumen.generate_pdf(z_s=1.0, mu=mu)
     theta = (0.674, 0.315, 0.811, 0.0493, 0.965, 3.402)
-    assert np.allclose(pdf, model_mc.pdf_mu(mu, z_s=1.0, theta=theta))
+    mu = np.geomspace(0.5, 20.0, 500)
+    _, p_img = flumen.generate_pdf(z_s=1.0, mu=mu, plane="image")
+    assert np.allclose(p_img, model_mc.pdf_mu(mu, z_s=1.0, theta=theta))
+    _, p_def = flumen.generate_pdf(z_s=1.0, mu=mu)
+    _, p_src = flumen.generate_pdf(z_s=1.0, mu=mu, plane="source")
+    assert np.allclose(p_def, p_src)
+    assert np.allclose(p_src, p_img / mu)                     # unit flux: <1/mu>_I = 1
     grid = np.unique(np.concatenate([np.linspace(0.85, 1.15, 3000), np.geomspace(0.4, 80.0, 3000)]))
-    _, p_src = flumen.generate_pdf(z_s=2.0, mu=grid, plane="source")
-    assert np.trapezoid(p_src, grid) == pytest.approx(1.0, abs=5e-3)
+    for flux_mode in ("unit", "standard"):
+        _, ps = flumen.generate_pdf(z_s=2.0, mu=grid, flux_mode=flux_mode)
+        assert np.trapezoid(ps, grid) == pytest.approx(1.0, abs=5e-3), flux_mode
 
 
 def test_analytic_default_plane_matches_toplevel(model):
-    """Option 1 (2026-10-20): image plane by default everywhere -- the class, generate_pdf and the MC backend."""
+    """Source plane by default everywhere for the analytic backend (class and generate_pdf, since 0.4.0)."""
     p = PLANCK
     lnmu = np.linspace(-0.1, 3.0, 400)
     _, top = flumen.generate_pdf_lnmu(z_s=p[0], lnmu=lnmu, backend="analytic")
     assert np.allclose(model.pdf_lnmu(lnmu, p), top)
-    assert np.allclose(model.pdf_lnmu(lnmu, p), model.pdf_lnmu(lnmu, p, plane="image"))
-    assert not np.allclose(model.pdf_lnmu(lnmu, p), model.pdf_lnmu(lnmu, p, plane="source"))
+    assert np.allclose(model.pdf_lnmu(lnmu, p), model.pdf_lnmu(lnmu, p, plane="source"))
+    assert not np.allclose(model.pdf_lnmu(lnmu, p), model.pdf_lnmu(lnmu, p, plane="image"))

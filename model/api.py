@@ -7,6 +7,10 @@ from .composite import SingleBodyComposite
 class MagnificationPDF:
     """Conditional image-plane magnification PDF emulator.
 
+    This low-level class returns the IMAGE-plane PDF (random lines of sight), the measure of the Monte-Carlo rays it
+    was trained on (<1/mu> = 1 under flux_mode="unit"). ``flumen.generate_pdf`` returns the SOURCE-plane PDF by default
+    since 0.4.0 (P_S = P_I / (mu <1/mu>_I), the one for standard sirens); pass ``plane="image"`` there for this one.
+
     Parameters
     ----------
     device : str, default="cpu"
