@@ -21,7 +21,7 @@ EXPECTED_SHA256 = {
 }
 
 PLANCK = (1.0, 0.674, 0.315, 0.811, 0.0493, 0.965, 3402.0, 0.0, -1.0, 0.0)   # (z_s, h, Om, s8, Ob, ns, zeq, Ok, w0, wa)
-GOLDEN_CASES = [  # source-plane ln P(ln mu)
+GOLDEN_CASES = [  # SOURCE-plane ln P(ln mu) (the chain's native quantity)
     (PLANCK, [-0.05, 0.0, 0.3, 2.0, 6.0],
      [2.0804599334475644, 1.8414951026834963, -2.9259215369852534, -12.034122436767518, -21.161181311740112]),
     ((5.0, 0.80, 0.45, 1.30, 0.045, 0.95, 3350.0, -0.10, -0.8, -0.5), [-0.3, 0.0, 0.5, 3.0, 8.0],
@@ -48,7 +48,7 @@ def test_analytic_checkpoint_hashes():
 
 @pytest.mark.parametrize("params, lnmu, expected", GOLDEN_CASES)
 def test_analytic_golden_log_density(model, params, lnmu, expected):
-    assert np.allclose(model.log_prob_lnmu(np.array(lnmu), params), expected, rtol=0, atol=1e-4)
+    assert np.allclose(model.log_prob_lnmu(np.array(lnmu), params, plane="source"), expected, rtol=0, atol=1e-4)
 
 
 @pytest.mark.parametrize("z_s", [0.6, 1.0, 3.0, 8.0])
@@ -109,3 +109,13 @@ def test_mc_backend_default_unchanged_and_source_plane():
     grid = np.unique(np.concatenate([np.linspace(0.85, 1.15, 3000), np.geomspace(0.4, 80.0, 3000)]))
     _, p_src = flumen.generate_pdf(z_s=2.0, mu=grid, plane="source")
     assert np.trapezoid(p_src, grid) == pytest.approx(1.0, abs=5e-3)
+
+
+def test_analytic_default_plane_matches_toplevel(model):
+    """Option 1 (2026-10-20): image plane by default everywhere -- the class, generate_pdf and the MC backend."""
+    p = PLANCK
+    lnmu = np.linspace(-0.1, 3.0, 400)
+    _, top = flumen.generate_pdf_lnmu(z_s=p[0], lnmu=lnmu, backend="analytic")
+    assert np.allclose(model.pdf_lnmu(lnmu, p), top)
+    assert np.allclose(model.pdf_lnmu(lnmu, p), model.pdf_lnmu(lnmu, p, plane="image"))
+    assert not np.allclose(model.pdf_lnmu(lnmu, p), model.pdf_lnmu(lnmu, p, plane="source"))

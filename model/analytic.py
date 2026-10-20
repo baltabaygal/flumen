@@ -95,7 +95,9 @@ class AnalyticPDF:
     """Source/image-plane magnification PDF of the analytic chain, conditional on (z_s, 9 cosmological parameters).
 
     Parameters are given as ``params = (z_s, h, Om, sigma8, Ob, ns, zeq, Ok, w0, wa)`` (zeq in absolute units).
-    ``plane="source"`` (native) or ``"image"``. Densities are with respect to d ln(mu) unless stated otherwise.
+    ``plane="image"`` (default, as for the MC backend and ``flumen.generate_pdf``: random lines of sight) or
+    ``plane="source"`` (the chain's native quantity: random source positions -- use this for standard sirens before
+    detection selection). Densities are with respect to d ln(mu) unless stated otherwise.
     """
 
     def __init__(self, device="cpu", ckpt_dir=CKPT_DIR, seeds=(0, 1)):
@@ -263,8 +265,8 @@ class AnalyticPDF:
         self._cache[key] = c
         return c
 
-    def log_prob_lnmu(self, lnmu, params, plane="source"):
-        """ln of the density with respect to d ln(mu), source (native) or image plane."""
+    def log_prob_lnmu(self, lnmu, params, plane="image"):
+        """ln of the density with respect to d ln(mu); image plane by default, ``plane="source"`` for sirens."""
         if plane not in ("source", "image"):
             raise ValueError("plane must be 'source' or 'image'")
         c = self.prepare(params)
@@ -278,10 +280,10 @@ class AnalyticPDF:
             out = out + x - math.log(c["mean_mu"])
         return float(out[0]) if scalar else out
 
-    def pdf_lnmu(self, lnmu, params, plane="source"):
+    def pdf_lnmu(self, lnmu, params, plane="image"):
         return np.exp(self.log_prob_lnmu(lnmu, params, plane))
 
-    def pdf_mu(self, mu, params, plane="source"):
+    def pdf_mu(self, mu, params, plane="image"):
         """Density with respect to d mu."""
         mu = np.asarray(mu, dtype=np.float64)
         if np.any(mu <= 0):
