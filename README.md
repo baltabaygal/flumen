@@ -57,6 +57,18 @@ import numpy as np
 mu, pdf = flumen.generate_pdf(z_s=1.0, mu=np.geomspace(0.5, 15.0, 1000))
 ```
 
+> **Which plane? (read this for standard sirens.)** `generate_pdf` returns the **image-plane** PDF by default
+> (`plane="image"`, both backends): the distribution over random *lines of sight*, which is what the Monte-Carlo
+> rays measure ($\langle 1/\mu\rangle = 1$). For sources at random positions, e.g. GW sirens before detection
+> selection, use the **source-plane** PDF, `plane="source"`, $P_S(\mu) = P_I(\mu)/(\mu\langle1/\mu\rangle_I)$. The
+> image-plane PDF is shifted toward magnification by about ${\rm Var}(\ln\mu)$: $\langle\ln\mu\rangle$ = +0.003 vs −0.003
+> at $z_s=1$, +0.010 vs −0.009 at $z_s=2$, +0.047 vs −0.040 at $z_s=10$ (Planck-like). The default is kept for
+> backward compatibility.
+>
+> ```python
+> mu, p_src = flumen.generate_pdf(z_s=2.0, plane="source")        # source plane, for sirens
+> ```
+
 `mu` and `pdf` are plain `numpy.ndarray`s of the same shape; `pdf` is
 `p(mu)` (density w.r.t. `d mu`, integrates to 1 over `mu`). Use
 `flumen.generate_pdf_lnmu(...)` for the density w.r.t. `d ln(mu)` instead.

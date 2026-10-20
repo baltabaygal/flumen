@@ -200,8 +200,10 @@ def generate_pdf(
         "analytic": the emulator of the semi-analytic chain; accepts ``Ok``, ``w0``,
         ``wa``; ``flux_mode`` and ``tail_mode`` do not apply to it.
     plane : str, optional
-        "image" (default): random lines of sight, the measure of the MC engine.
-        "source": random source positions, P_S(mu) = P_I(mu) / (mu <1/mu>_I).
+        "image" (default, kept for backward compatibility): random lines of sight, the measure of the MC engine
+        (<1/mu> = 1). "source": random source positions, P_S(mu) = P_I(mu) / (mu <1/mu>_I) -- use this for
+        standard sirens (sources at random positions, before detection selection). The image-plane PDF is shifted
+        toward magnification by about Var(ln mu) (<ln mu> +0.010 vs -0.009 at z_s = 2, Planck-like).
     Ok, w0, wa : float, optional
         Curvature and CPL dark-energy parameters (analytic backend only).
         Defaults 0, -1, 0.
@@ -252,7 +254,8 @@ def generate_pdf_lnmu(
     w0=-1.0,
     wa=0.0,
 ):
-    """Same as :func:`generate_pdf`, but on the ln(mu) grid/density.
+    """Same as :func:`generate_pdf`, but on the ln(mu) grid/density. Image plane by default; pass
+    ``plane="source"`` for sources at random positions (standard sirens).
 
     Returns ``(lnmu, pdf_lnmu)`` where ``pdf_lnmu`` is the density with
     respect to ``d ln(mu)`` (integrates to 1 over ``lnmu``).
