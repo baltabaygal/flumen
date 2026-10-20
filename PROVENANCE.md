@@ -53,3 +53,19 @@
   - Total Variation ($TVS$): **3.37% median** across contexts (test-split max: 8.48%)
 - **Asymptotic Tail Exponent**: $\frac{d\ln p}{d\ln\mu} = -2.0000 \pm 0.001$ as $\mu \to \infty$.
 - **Flux Conservation**: Numerical unit inverse-mean $\langle 1/\mu \rangle = 1.0000 \pm 0.001$.
+
+
+---
+
+## Analytic backend checkpoints (2026-10-20)
+
+- `model/checkpoints/analytic/ctx.pt`: `21c2d3f3dfb4a96be31bc497264925358c593d235f28c44715a780b8d34a1a11`
+  (from `stochastic_wl_analytic/learning/models/ctx_final.pt`)
+- `model/checkpoints/analytic/body_s0.pt`: `d6211ce4698c33c58e512afca85bcb928eb276398a519216b801e12326bb7080`
+  (from `.../learning/models/body_final_s0.pt`)
+- `model/checkpoints/analytic/body_s1.pt`: `f89b3aed1dade768583855677190cf0b09bc7f8a35a133ae6e0c3e0635a57fe3`
+  (from `.../learning/models/body_final_s1.pt`)
+- **Pipeline:** `stochastic_wl_analytic/learning/`; README sections 6–11 there give every step, choice and number.
+- **Code:** `model/analytic.py` is a float64 port of `learning/emulator.py`, agreeing to ≤ 8e-4 in ln P at
+  P ≥ 1e-12 of the peak (float32 vs float64 seed mixture). Golden values and checks are in
+  `evaluation/test_analytic.py`.

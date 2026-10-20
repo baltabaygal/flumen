@@ -23,4 +23,4 @@ packages = ["flumen", "flumen.model", "flumen.training", "flumen.evaluation", "f
 package-dir = {flumen = "."}
 
 [tool.setuptools.package-data]
-"flumen.model" = ["checkpoints/*.pt", "calibration/*.json"]
+"flumen.model" = ["checkpoints/*.pt", "checkpoints/analytic/*.pt", "calibration/*.json"]

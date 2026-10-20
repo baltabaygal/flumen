@@ -69,6 +69,40 @@ calls are cheap.
 
 A runnable version of the above is in `examples/quickstart.py`.
 
+### Analytic backend (option)
+
+`backend="analytic"` switches to an emulator of the **semi-analytic compound-Poisson (Lévy–Khintchine) chain**
+(`stochastic_wl_analytic`; the draft-paper model: r200-truncated NFW halos, pseudo-elliptical halos, filaments,
+exact-moment subhalos, linear-bias $\xi_{\rm lin}$ clustering). It extends the parameter space with curvature and CPL
+dark energy:
+
+```python
+mu, pdf = flumen.generate_pdf(z_s=2.0, backend="analytic")                          # Planck-like, flat LCDM
+mu, pdf = flumen.generate_pdf(z_s=2.0, backend="analytic", Ok=-0.05, w0=-0.9, wa=-0.3)
+lnmu, p_src = flumen.generate_pdf_lnmu(z_s=2.0, backend="analytic", plane="source")
+```
+
+- **Planes.** `plane="image"` (default, both backends) is the PDF over random lines of sight, the measure of the
+  Monte-Carlo engine; `plane="source"` is the PDF over random source positions,
+  $P_S(\mu) = P_I(\mu)/(\mu\langle 1/\mu\rangle_I)$, the relevant one for standard sirens. The analytic chain is native
+  in the source plane (tail $P_S(\ln\mu)\propto\mu^{-2}$; image plane $\propto\mu^{-1}$).
+- **Validity box** `flumen.ANALYTIC_TRAINING_RANGE`: $z_s\in[0.5,12]$, $h\in[0.55,0.85]$, $\Omega_K\in[-0.15,0.05]$,
+  $w_0\in[-1.5,0.5]$, $w_a\in[-2,1]$ with $w_0+w_a<0$ and an early dark-energy cap; the other ranges as for the MC backend.
+- **Architecture.** MLP ensemble for width, location, empty-beam cutoff and $\mu^{-2}$ tail amplitude; a conditional
+  NSF flow (2 seeds) for the body in $u=\ln(y-y_b+0.2)$; a structural cutoff with a smooth log-quadratic edge law; a
+  $\mu^{-2}$ tail law joined where the body falls below $10^{-5}$ of its peak. 8 ms to set up a cosmology, ~1 ms per
+  500 points.
+- **Accuracy** (982 held-out test configurations, vs the exact chain PDFs): max $|\Delta P|$ = 0.40% of the peak
+  (median; 1.4% at 95%), KL $9.5\times10^{-6}$ nats, clipped variance within 1.3%, tail ratios 0.95–1.05 to
+  $\ln\mu=8$. With this package's own metrics (`evaluate_kl.py` protocol, 6000 rays drawn from the exact PDFs):
+  ACE KL 0.0037, quantile KL 0.00007, TV 2.9%, truncated $W_1$ 0.0056, KS 1.1% (medians) — equal to the sampling-noise
+  floor of 6000 rays (0.0036 / 0.00003 / 2.9% / 0.0056 / 1.1%).
+- **Caveats.** The two backends emulate **different models** and need not agree: at $z_s\lesssim1$ the engine's
+  untruncated halo outskirts move the peak by ~20% relative to the chain's r200 halos. The analytic backend does not
+  impose $\langle1/\mu\rangle_I=1$: the chain has a second-order flux deficit ($\langle\mu\rangle_S-1$ = −0.6% median), so
+  `flux_mode`/`tail_mode` do not apply. Weakest band $z_s$ 0.5–1 (1.0% / 4.0% of the peak).
+  See `docs/MODEL_CARD.md` section 6.
+
 ### Lower-level API
 
 `flumen.generate_pdf` wraps `flumen.model.MagnificationPDF`, which remains
@@ -93,6 +127,7 @@ the tradeoff between the two.
 
 - `model/`: the inference implementation, context predictor calibration, and the trained
   production checkpoint (`single_body_gauss.pt`). This is all `flumen.generate_pdf` needs at runtime.
+  `model/analytic.py` + `model/checkpoints/analytic/` are the analytic backend (inference only).
 - `data/`: $u$-space train/validation/test arrays and simulation datasets with a SHA-256 manifest.
 - `training/`: standalone retraining recipes (`train.py`, `fit_predictors.py`, `data.py`) for the flow and context regressions.
 - `evaluation/`: validation/test accuracy certificates, reference simulation
