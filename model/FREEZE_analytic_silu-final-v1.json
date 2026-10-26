@@ -1,0 +1,179 @@
+{
+ "identifier": "silu-final-v1+58749252d3de",
+ "model_version": "silu-final-v1",
+ "flumen_version": "0.5.0",
+ "frozen": "2026-10-23 13:33:21",
+ "decision": "user GO 2026-10-23: 4-seed SiLU ensemble; original left-edge guard default; guard='auto' optional; no member rejection or clipping; test labels not re-scored for the final models",
+ "checkpoints": {
+  "MANIFEST.sha256": "8293a2c0168502156d1a55b2a495b33c01cb8ab1d057a6aa4c3818aaf3069986",
+  "body_s0.pt": "3ddbf7696638862f998f0a1718581bff898ff7ea8efa03b9c5acd13094185f2b",
+  "body_s1.pt": "bfadb19c507a76b284c295caa0e50a8ca14a09f562f66b809342a76e1a749dd8",
+  "body_s2.pt": "166573be7b3290f06d772f3f627908666a69cf6734a5492cc3192704951e1075",
+  "body_s3.pt": "15e296f9d0fe8e2aaac9a3f5708191890a349796e0a62efa87109066676de6a6",
+  "ctx.pt": "0b20fc36fadcb5bf1db2a4b8745ec3b803fb4f0fd4d569e7735fe3b185235d82",
+  "meta.json": "560fe9449a4ade410af2d3e7eb3971cb698039bb04cc8fdce702d97d8b544991"
+ },
+ "code": {
+  "model/analytic.py": "786a907f1d129c2315e2293ecfce4f29d70074eadf2381b809a91c1e6abffe45",
+  "evaluation/analytic_numpy_reference.py": "d5505a7df7d0ee1f109419602c652963dd2b2324d3776fd9d6f90af5f42b3ae9",
+  "evaluation/test_analytic.py": "cc11f798dd8f3a5a5f983d3d8847551c55f9ff0066533d826f2cc04c69777b93"
+ },
+ "source": {
+  "repo": "stochastic_wl_analytic",
+  "git": {
+   "commit": "3ce5e2e96ed1149662bffa7948a22e9329cb7615",
+   "dirty": true,
+   "branch": "fix/lowz-2026-10-19"
+  },
+  "metadata": "learning/models/silu_final_metadata.json",
+  "report": "learning/PRODUCTION_READINESS_SILU.md",
+  "hashes_of_source_models": {
+   "models/ctx_mix1_final.pt": "d0be3a106d83d19283a1d5ef44fdba2cc9b2b2464f4cc401761cef75593c1e0d",
+   "models/ctx_mix1_final_pred.npz": "a6b7bb5c1f27e0200c6970c33311cb1bf46739eb2b75d555e2632b3a872f87e4",
+   "models/body_silu_final_s0.pt": "ca662356ae95ab99c51441744508114cb7f33f05b0b8bdc4b5679b7b972f9da7",
+   "models/body_silu_final_s1.pt": "3cd61453b933718ca2f52accea39482dd7fa07ec2e721cfc94dbb1e99402230a",
+   "models/body_silu_final_s2.pt": "aefcd37f6becb009da228b25ba339937c731f09ea774f2dfd61da350eaac1f5f",
+   "models/body_silu_final_s3.pt": "546d6ff7b727df95c14bdd4dbb15d61eea6caf738f5bc758cb39a4d94d17d5d8"
+  }
+ },
+ "verification": {
+  "pytest": "flumen/evaluation: 42 passed",
+  "numerical_equivalence": {
+   "lnP_abs_diff_P_vs_N": {
+    "median": 2.3945215685827748e-06,
+    "p99": 0.00019695467348110929,
+    "max": 0.005322693770526854
+   },
+   "lnP_abs_diff_P_vs_R": {
+    "median": 1.1629426038828328e-07,
+    "p99": 6.122385320226801e-05,
+    "max": 0.0008728687358754428
+   },
+   "lnP_abs_diff_N_vs_R": {
+    "median": 2.4204732771981874e-06,
+    "p99": 0.00020390092887735635,
+    "max": 0.005566231252856824
+   },
+   "pdf_diff_over_peak_P_vs_N": {
+    "median": 1.000115864330817e-06,
+    "p99": 2.774767415613012e-06,
+    "max": 2.844104596335487e-06
+   },
+   "pdf_diff_over_peak_P_vs_R": {
+    "median": 9.570092928092173e-08,
+    "p99": 1.4574571771041065e-07,
+    "max": 1.5572071592979439e-07
+   },
+   "norm_rel_diff_P_vs_N": 9.618993390692054e-08,
+   "norm_rel_diff_P_vs_R": 1.6778717859544656e-08,
+   "mean_mu_rel_diff_P_vs_N": 1.3771011917462772e-06,
+   "norm_range": [
+    0.9999923068435023,
+    0.9999992484929695
+   ],
+   "port_mass_integral_minus_1": {
+    "max_abs": 4.5762624489853465e-07,
+    "median_abs": 8.41481643809594e-08
+   },
+   "sigma8_derivative_abs_diff": {
+    "P-N@0.02": {
+     "median": 2.012999258116377e-05,
+     "p99": 0.00011629531274554016,
+     "max": 0.00018127106652388036
+    },
+    "P-R@0.02": {
+     "median": 1.1248308784406191e-06,
+     "p99": 4.280966153930027e-06,
+     "max": 6.726243627352968e-06
+    },
+    "N h=1e-3 vs 1e-2": {
+     "median": 5.505492112478638e-05,
+     "p99": 0.002271401298946164,
+     "max": 0.010751624613059008
+    },
+    "P-N@0.1": {
+     "median": 5.041578369224808e-06,
+     "p99": 3.5298669012906454e-05,
+     "max": 5.095682399813839e-05
+    },
+    "N_trunc_0.02_vs_0.001": {
+     "median": 0.00017845161483509564,
+     "p99": 0.0042135634465487876,
+     "max": 0.011765365650540094
+    }
+   },
+   "ensemble_mixture": {
+    "port_vs_logmeanexp_of_single_seeds": 3.552713678800501e-15,
+    "numpy_vs_logmeanexp_of_single_seeds": 3.552713678800501e-15,
+    "port_vs_numpy_logpU": 7.697486311997181e-05
+   },
+   "guard_auto": {
+    "n": 502,
+    "max_abs_dM_diff": 8.917643362360561e-07,
+    "fallback_decisions_equal": true,
+    "n_fallback_port": 2,
+    "n_fallback_learning": 2,
+    "max_abs_dM": 0.24089458592484836
+   }
+  },
+  "chain_regression": {
+   "Planck | port (torch nets, default)": {
+    "pdf_max": 0.004228607325081643,
+    "d1": 0.011091949834903414,
+    "d2": 0.035172685603719764,
+    "d3": 0.12911069776493853,
+    "N10_rms_ln_0.02": 0.007533707374056357,
+    "rough_0.02": 0.009120984255937646,
+    "N10_rms_ln_0.058": 0.0074191995563575525,
+    "rough_0.058": 0.010862611488408842
+   },
+   "Planck | port (pure-NumPy f64 nets)": {
+    "pdf_max": 0.004227978320814903,
+    "d1": 0.011092191837782359,
+    "d2": 0.03516881980751122,
+    "d3": 0.1291169160088844,
+    "N10_rms_ln_0.02": 0.007537129227488846,
+    "rough_0.02": 0.009120609549716089,
+    "N10_rms_ln_0.058": 0.007422453847199947,
+    "rough_0.058": 0.01086267920635282
+   },
+   "Planck | chain roughness": {
+    "0.02": 0.009176697489465827,
+    "0.058": 0.011094633550358004
+   },
+   "line2 | port (torch nets, default)": {
+    "pdf_max": 0.0038671657637841745,
+    "d1": 0.010576969504178831,
+    "d2": 0.035793283184618635,
+    "d3": 0.15098787554170848,
+    "N10_rms_ln_0.02": 0.002552892670084682,
+    "rough_0.02": 0.009428467887087164,
+    "N10_rms_ln_0.058": 0.003786008373007431,
+    "rough_0.058": 0.01072797427024341
+   },
+   "line2 | port (pure-NumPy f64 nets)": {
+    "pdf_max": 0.0038666609295363993,
+    "d1": 0.010576444650719755,
+    "d2": 0.03579401687597797,
+    "d3": 0.1510004796068302,
+    "N10_rms_ln_0.02": 0.0025561338330526663,
+    "rough_0.02": 0.009427718975912358,
+    "N10_rms_ln_0.058": 0.0037869581334731587,
+    "rough_0.058": 0.010726942109069394
+   },
+   "line2 | chain roughness": {
+    "0.02": 0.010078363056432492,
+    "0.058": 0.011442536923116262
+   }
+  }
+ },
+ "limitations": [
+  "left-edge guard anchored at the peak in ~0.1% of configurations (flagged ids 1580, 1720, 1920 for the shipped ensemble)",
+  "configuration 1580 (test split, z_s 0.258) is the hardest test configuration",
+  "z_s < 0.5: no chain reference",
+  "spline-knot kinks remain in d ln P / d ln sigma8",
+  "single-seed collapses hidden by the ensemble"
+ ],
+ "previous_identifier_before_relu_removal": "silu-final-v1+f062dc73ba24",
+ "legacy_removed": "the 2026-10-20 ReLU emulator (relu-v0) was removed from FLUMEN 0.5.0 at the user's request; it remains in git (commit 73e4654) and in stochastic_wl_analytic/learning/models/ (ctx_final.pt, body_final_s*.pt)"
+}

@@ -1,0 +1,53 @@
+{
+  "version": "mix3-v1",
+  "exported": "2026-10-26T17:07:42+0200",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "description": "Existing eight-seed mix3 SiLU ensemble + ctx_mix3, mixed Gaussian/VP targets, 4372 configurations, z_s .2-12. Train-only; validation checkpoint selection. No final train+validation fit.",
+  "mixing_precision": "source-float32",
+  "rise_tol": 0.0,
+  "guard": "current",
+  "source_sha256": {
+    "learning/models/ctx_mix3.pt": "b8299d460b1f39e6a772c379fafdda86a466577c6c9be2cf65e3bcc0d0e23eb0",
+    "learning/models/body_mix3silu_s0.pt": "83c004f3b4495c34345279dd109c66d90bea78319d5a69ab606a6bd19a0d1012",
+    "learning/models/body_mix3silu_s1.pt": "034f44e11a080dc6627a7e2e51e24d750906b4ff9a3dd5e59b0a9fb53b93be55",
+    "learning/models/body_mix3silu_s2.pt": "4ba181e237b2045230785cdfc899098f3a8e67165dabd3db5b2e918ae0889d52",
+    "learning/models/body_mix3silu_s3.pt": "1afb903d96b066f43b9d0c55acc6b3c34436ed87d08496ee47b908c8d7307885",
+    "learning/models/body_mix3silu_s4.pt": "648d14d9b9cb055c1840f4cfe2a0907d4dec2a3a2ede85b320f60d831fdcf92b",
+    "learning/models/body_mix3silu_s5.pt": "b1f4b95d5009ad4792eb47b14cbd414f46833f03da3ba9f8049a68e0685d8814",
+    "learning/models/body_mix3silu_s6.pt": "3eb4f6c49b0acac1f9858efeaa519966ccaa65be8d5a10cd8a95f872aa90b52a",
+    "learning/models/body_mix3silu_s7.pt": "968a85f259d4b49a226b4af9d1685a67f54b31a790f68faf80577710a6bec5b0"
+  },
+  "selected_epochs": {
+    "0": 1110,
+    "1": 850,
+    "2": 910,
+    "3": 730,
+    "4": 1120,
+    "5": 830,
+    "6": 980,
+    "7": 940
+  },
+  "dataset_sha256": {
+    "body_mix3.npz": "085181c3e36e21b4bd94dbe786464a3135dab53ac6b32547a4f0964b92f9fb36",
+    "assembled_mix3.npz": "af7d014c93099b095d79eb1f7f47f68d413323e53ae5162d020d7e4977ec4cf8"
+  },
+  "limitations": [
+    "Line2 low-z N10 errors reach about5% at epsilon=.005 against Gaussian refs; worst-point VP comparison about4.2%.",
+    "z_s<.5 depends on r200 halo-edge choice; sparse corner validation errors remain.",
+    "Original guard and tail behavior preserved; no hardening or derivative-loss experimental models promoted.",
+    "New model scored on validation/regression references; no new test scoring."
+  ],
+  "records": [
+    "learning/results/mix3_extra_seeds/README.md",
+    "learning/results/mix3_sigma8/README.md"
+  ]
+}

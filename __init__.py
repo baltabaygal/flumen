@@ -1,49 +1,24 @@
-"""
-flumen — Fast Lensing Universal Magnification Emulator with Normalizing flows.
+"""FLUMEN: weak-lensing magnification PDFs.
 
-A normalizing-flow emulator for the gravitational-wave weak-lensing
-magnification PDF, trained on Monte-Carlo simulations of the Vaskonen (2026)
-lensing model. Wraps the frozen ``model/`` bundle behind one convenience
-function so the PDF for a given cosmology and source redshift is a single
-call away.
+The analytic model is the default:
+    mu, pdf = flumen.generate_pdf(z_s=1.0)
 
-Quick start
------------
->>> import flumen
->>> mu, pdf = flumen.generate_pdf(z_s=1.0, Om=0.315, h=0.674, sigma8=0.811)
->>> mu.shape, pdf.shape
-((2000,), (2000,))
-
-See ``generate_pdf`` for the full parameter list and ``examples/basic_usage.py``
-for a runnable script. Full architecture, training and validation details are
-in ``docs/MODEL_CARD.md``.
-
-Backends
---------
-``backend="mc"`` (default): the normalizing-flow emulator of the Vaskonen (2026) Monte-Carlo engine, flat LCDM.
-``backend="analytic"``: an emulator of the semi-analytic compound-Poisson chain (stochastic_wl_analytic), which also
-takes ``Ok``, ``w0``, ``wa``. See ``docs/MODEL_CARD.md`` section "Analytic backend".
-
-Planes (changed in 0.4.0)
--------------------------
-``plane="source"`` (DEFAULT since 0.4.0): the PDF over random source positions, the one for standard sirens (before
-detection selection). ``plane="image"``: the PDF over random lines of sight, the measure of the Monte-Carlo rays and the
-default of flumen <= 0.3; P_S(mu) = P_I(mu) / (mu <1/mu>_I). The low-level classes keep their native planes:
-``model.MagnificationPDF`` = image plane (MC rays), ``model.AnalyticPDF`` = source plane by default.
+PDFs use the source plane by default. Pass plane="image" for the image plane,
+or backend="mc" to explicitly select the older Monte-Carlo model.
 """
 
 import numpy as np
 
 from .model import load_analytic_model, load_model
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __all__ = ["generate_pdf", "generate_pdf_lnmu", "get_model", "TRAINING_RANGE", "ANALYTIC_TRAINING_RANGE",
            "__version__"]
 
 # Confirmed training/validity box (see docs/MODEL_CARD.md). Calls outside this
 # box are extrapolation -- generate_pdf warns rather than raises, since a
 # small overshoot (e.g. z_s=12.5) is usually still fine.
-TRAINING_RANGE = {
+MC_TRAINING_RANGE = {
     "z_s": (0.2, 12.0),
     "h": (0.55, 0.80),
     "Om": (0.15, 0.50),
@@ -53,10 +28,10 @@ TRAINING_RANGE = {
     "zeq": (3300.0, 3500.0),
 }
 
-# Training box of the analytic backend (stochastic_wl_analytic training set; z_s >= 0.5, h to 0.85, curvature and
+# Training box of the default mix3 analytic backend (z_s >= 0.2, h to 0.85, curvature and
 # CPL dark energy). Its sgl.Cosmology domain also requires w0 + wa < 0 and rho_DE/rho_m(z = 1100) <= 1e-2.
 ANALYTIC_TRAINING_RANGE = {
-    "z_s": (0.5, 12.0),
+    "z_s": (0.2, 12.0),
     "h": (0.55, 0.85),
     "Om": (0.15, 0.50),
     "sigma8": (0.40, 1.50),
@@ -68,6 +43,8 @@ ANALYTIC_TRAINING_RANGE = {
     "wa": (-2.0, 1.0),
 }
 
+TRAINING_RANGE = ANALYTIC_TRAINING_RANGE
+
 # Planck-like fiducial cosmology, used as the default for every parameter
 # except z_s (which has no sensible default and must be given explicitly).
 _FIDUCIAL = dict(h=0.674, Om=0.315, sigma8=0.811, Ob=0.0493, ns=0.965, zeq=3402.0)
@@ -75,7 +52,7 @@ _FIDUCIAL = dict(h=0.674, Om=0.315, sigma8=0.811, Ob=0.0493, ns=0.965, zeq=3402.
 _MODEL_CACHE = {}
 
 
-def get_model(device="cpu", flux_mode="unit", tail_mode="asymptotic", backend="mc"):
+def get_model(device="cpu", flux_mode="unit", tail_mode="asymptotic", backend="analytic"):
     """Return the (cached) loaded model: :class:`model.MagnificationPDF` (``backend="mc"``) or
     :class:`model.AnalyticPDF` (``backend="analytic"``; ``flux_mode``/``tail_mode`` do not apply to it).
 
@@ -131,8 +108,8 @@ def _evaluate(z_s, cosmo, x, density, device, flux_mode, tail_mode, warn_out_of_
                          "for curvature or dark energy")
     if warn_out_of_range:
         for k, v in zip(("z_s", "h", "Om", "sigma8", "ns", "Ob", "zeq"), (z_s, h, Om, sigma8, ns, Ob, zeq)):
-            _check_range(k, v, warn_out_of_range)
-    model = get_model(device=device, flux_mode=flux_mode, tail_mode=tail_mode)
+            _check_range(k, v, warn_out_of_range, MC_TRAINING_RANGE)
+    model = get_model(device=device, flux_mode=flux_mode, tail_mode=tail_mode, backend="mc")
     theta = (h, Om, sigma8, Ob, ns, zeq / 1000.0)
     pdf = model.pdf_mu(x, z_s=z_s, theta=theta) if density == "mu" else model.pdf_lnmu(x, z_s=z_s, theta=theta)
     if plane == "source":
@@ -164,7 +141,7 @@ def generate_pdf(
     flux_mode="unit",
     tail_mode="asymptotic",
     warn_out_of_range=True,
-    backend="mc",
+    backend="analytic",
     plane="source",
     Ok=0.0,
     w0=-1.0,
@@ -198,18 +175,18 @@ def generate_pdf(
     device : str, optional
         "cpu" (default) or "cuda".
     flux_mode : str, optional
-        "unit" (default) enforces exact <1/mu> = 1. "standard" enforces unit normalization.
+        MC backend only: "unit" enforces <1/mu> = 1; "standard" enforces unit normalization.
     tail_mode : str, optional
-        "asymptotic" (default) uses the smooth C^inf relaxation approaching mu^-2 at rate O(1/mu).
+        MC backend only: "asymptotic" uses smooth relaxation approaching mu^-2.
         "hermite" uses the finite C^1 cubic Hermite bridge.
     warn_out_of_range : bool, optional
         If True (default), warn when a parameter falls outside
         ``TRAINING_RANGE`` (``ANALYTIC_TRAINING_RANGE`` for the analytic backend).
         Does not raise -- the model still evaluates.
     backend : str, optional
-        "mc" (default): the emulator of the Monte-Carlo engine (flat LCDM).
-        "analytic": the emulator of the semi-analytic chain; accepts ``Ok``, ``w0``,
-        ``wa``; ``flux_mode`` and ``tail_mode`` do not apply to it.
+        "analytic" (default): the analytic model; accepts ``Ok``, ``w0``, ``wa``.
+        "mc": the older Monte-Carlo model (flat LCDM).
+        ``flux_mode`` and ``tail_mode`` apply only to "mc".
     plane : str, optional
         "source" (default since 0.4.0): random source positions -- the PDF for standard sirens (before
         detection selection), P_S(mu) = P_I(mu) / (mu <1/mu>_I). "image": random lines of sight, the measure of
@@ -259,7 +236,7 @@ def generate_pdf_lnmu(
     flux_mode="unit",
     tail_mode="asymptotic",
     warn_out_of_range=True,
-    backend="mc",
+    backend="analytic",
     plane="source",
     Ok=0.0,
     w0=-1.0,

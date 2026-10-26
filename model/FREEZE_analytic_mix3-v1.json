@@ -1,0 +1,82 @@
+{
+  "identifier": "mix3-v1+b646e52a01be",
+  "model_version": "mix3-v1",
+  "frozen": "2026-10-26T17:17:59+0200",
+  "decision": "User authorized promotion of existing mix3silu seeds0..7 and ctx_mix3 on 2026-10-26; no commits, no retraining, no derivative-loss trials promoted.",
+  "local_promotion": true,
+  "published": false,
+  "committed": false,
+  "default_guard": "current",
+  "rise_tolerance": 0.0,
+  "mixing_precision": "source-float32",
+  "source": {
+    "repo": "stochastic_wl_analytic",
+    "commit": "3ce5e2e96ed1149662bffa7948a22e9329cb7615",
+    "dirty": true,
+    "sha256": {
+      "learning/models/ctx_mix3.pt": "b8299d460b1f39e6a772c379fafdda86a466577c6c9be2cf65e3bcc0d0e23eb0",
+      "learning/models/body_mix3silu_s0.pt": "83c004f3b4495c34345279dd109c66d90bea78319d5a69ab606a6bd19a0d1012",
+      "learning/models/body_mix3silu_s1.pt": "034f44e11a080dc6627a7e2e51e24d750906b4ff9a3dd5e59b0a9fb53b93be55",
+      "learning/models/body_mix3silu_s2.pt": "4ba181e237b2045230785cdfc899098f3a8e67165dabd3db5b2e918ae0889d52",
+      "learning/models/body_mix3silu_s3.pt": "1afb903d96b066f43b9d0c55acc6b3c34436ed87d08496ee47b908c8d7307885",
+      "learning/models/body_mix3silu_s4.pt": "648d14d9b9cb055c1840f4cfe2a0907d4dec2a3a2ede85b320f60d831fdcf92b",
+      "learning/models/body_mix3silu_s5.pt": "b1f4b95d5009ad4792eb47b14cbd414f46833f03da3ba9f8049a68e0685d8814",
+      "learning/models/body_mix3silu_s6.pt": "3eb4f6c49b0acac1f9858efeaa519966ccaa65be8d5a10cd8a95f872aa90b52a",
+      "learning/models/body_mix3silu_s7.pt": "968a85f259d4b49a226b4af9d1685a67f54b31a790f68faf80577710a6bec5b0"
+    },
+    "dataset_sha256": {
+      "body_mix3.npz": "085181c3e36e21b4bd94dbe786464a3135dab53ac6b32547a4f0964b92f9fb36",
+      "assembled_mix3.npz": "af7d014c93099b095d79eb1f7f47f68d413323e53ae5162d020d7e4977ec4cf8"
+    }
+  },
+  "checkpoints": {
+    "MANIFEST.sha256": "b646e52a01be9fb976ba3d80d714cbfc37969c0db03f9fd4cc2a3802e0a0914b",
+    "body_s0.pt": "b8691ea59259855635efb0e424bd1acbc5731334ad216304db4f49fee43b3bfd",
+    "body_s4.pt": "59f95dac2a0c2755ec585f4e26cca2ad706c6bfcd9c6a527f21006f66ad823e5",
+    "ctx.pt": "b4524adbec612811fd0e149bffa4a1bc7f223d0e36527a4d726fa5041630ed68",
+    "body_s5.pt": "e4f0fb694ba15b31bcbc4b5f9f849755c7846d2277c8da220180a88261ecda4d",
+    "body_s1.pt": "287ff9aadd92ea8e4856ae4c00f13fc4fa06054999cc501686436f11e5e49533",
+    "body_s6.pt": "9486b579886f8f3add932bf4dccaf2122297bbd8d323f7e6c47c29e144f0c6d0",
+    "body_s2.pt": "9ccf2b2abd6d2b0315f08aa9603b6adfe2f274c4de5d15bc367acc64db7b366e",
+    "body_s3.pt": "5d0259f71dacb0c515bc8e30cf50f3c3c9085c8999f8547c947c062299d20198",
+    "body_s7.pt": "d9510c5efef932a6aa6c7d6705b253530da18959622750de03850090769d5427",
+    "meta.json": "0f82a0b2cce3bfcd911df2c389b0d3897156d136ae8adf7d1a70130ec68039d3"
+  },
+  "code_sha256": {
+    "model/analytic.py": "ef18190d71babaa3624a6d12e2d26e297bdd1e2588e91e503cc1147ae0a129c6",
+    "__init__.py": "23ff26848c50c56165a80984b3d9362441dae263b13f28260f4c80424ea2ce11",
+    "evaluation/test_analytic.py": "97ff45f39bd42627260c0846995808f13ddb258fe5b5ffd6209406dbb1690cc2",
+    "evaluation/test_analytic_mix3.py": "594a4f51e1738a5406185a9da45fdbd8b50f76ca5b27c60fa9ca5362d8a3f51d",
+    "evaluation/analytic_mix3_goldens.json": "0a8c16a2c8fe8cbe808b48cfa6f250e152bb7cd1f9536c4e3a4f26fca354a2fb",
+    "pyproject.toml": "94c94ab41efe3111467a7d05164acfb15f9cf09779e95eac7c0c67ec592a824f",
+    "examples/basic_usage.py": "167aae2ff2e16baf76ae0546c734651ff4107e7e31298c9a52bbedffc2d8d004"
+  },
+  "verification": {
+    "pytest": "67 passed",
+    "source_export_tensors_exact": true,
+    "feature_transform_exact": true,
+    "pdf_comparisons": 120,
+    "max_pdf_error_over_peak": 4.3054472703732734e-16,
+    "max_log_density_error": 1.7763568394002505e-15,
+    "max_normalization_relative_error": 2.220446049250313e-16,
+    "max_N10_relative_error": 1.827260565079314e-11,
+    "max_sigma8_response_relative_L2": 2.3352922411372997e-15,
+    "max_mass_integral_error": 4.60641827348951e-07,
+    "report": "qualification/analytic_mix3_export_verification.json",
+    "wheel": {
+      "sha256": "14e0715d97cfdc64a44d8c81ba31a21ef081c4a3add959d9b9484b10f8fb86a3",
+      "tests": "67 passed from extracted wheel",
+      "checkpoint_files_byte_identical": true
+    }
+  },
+  "training": "Existing train-only selected checkpoints; no final train+validation fit; validation/regression metrics, no new test scoring.",
+  "limitations": [
+    "Line2 low-z N10 errors reach about5% at epsilon=.005 against Gaussian refs; worst-point VP comparison about4.2%.",
+    "z_s<.5 depends on r200 halo-edge choice; sparse corner validation errors remain.",
+    "Original guard and tail behavior preserved; no hardening or derivative-loss experimental models promoted.",
+    "New model scored on validation/regression references; no new test scoring."
+  ],
+  "public_model_name": "analytic",
+  "default_backend": "analytic",
+  "interface_change": "User requested simple analytic name and default backend; unchanged weights and PDF arithmetic; no commit."
+}

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flumen"
-version = "0.4.0"
+version = "0.5.0"
 description = "Fast Lensing Universal Magnification Emulator with Normalizing flows -- a conditional GW weak-lensing magnification PDF emulator"
 readme = "README.md"
 license = {text = "MIT"}
@@ -23,4 +23,5 @@ packages = ["flumen", "flumen.model", "flumen.training", "flumen.evaluation", "f
 package-dir = {flumen = "."}
 
 [tool.setuptools.package-data]
-"flumen.model" = ["checkpoints/*.pt", "checkpoints/analytic/*.pt", "calibration/*.json"]
+"flumen.model" = ["checkpoints/*.pt", "checkpoints/analytic_silu_v1/*.pt", "checkpoints/analytic_silu_v1/*.json", "checkpoints/analytic_silu_v2/*.pt", "checkpoints/analytic_silu_v2/*.json", "checkpoints/analytic_mix3_v1/*.pt", "checkpoints/analytic_mix3_v1/*.json", "checkpoints/analytic_mix3_v1/*.sha256", "calibration/*.json"]
+"flumen.evaluation" = ["analytic_mix3_goldens.json"]

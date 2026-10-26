@@ -57,7 +57,7 @@
 
 ---
 
-## Analytic backend checkpoints (2026-10-20)
+## Analytic backend checkpoints (2026-10-20; REMOVED from the package in 0.5.0, see git history, commit `73e4654`)
 
 - `model/checkpoints/analytic/ctx.pt`: `21c2d3f3dfb4a96be31bc497264925358c593d235f28c44715a780b8d34a1a11`
   (from `stochastic_wl_analytic/learning/models/ctx_final.pt`)
@@ -69,3 +69,33 @@
 - **Code:** `model/analytic.py` is a float64 port of `learning/emulator.py`, agreeing to ≤ 8e-4 in ln P at
   P ≥ 1e-12 of the peak (float32 vs float64 seed mixture). Golden values and checks are in
   `evaluation/test_analytic.py`.
+
+---
+
+## Analytic backend `silu-final-v1` (2026-10-23, FLUMEN 0.5.0)
+
+- Checkpoints in `model/checkpoints/analytic_silu_v1/` (`MANIFEST.sha256`, `meta.json`); the 2026-10-20 ReLU checkpoints were removed from FLUMEN in 0.5.0 (the originals remain in `stochastic_wl_analytic/learning/models/`).
+  - `ctx.pt`: `0b20fc36fadcb5bf1db2a4b8745ec3b803fb4f0fd4d569e7735fe3b185235d82` (from `stochastic_wl_analytic/learning/models/ctx_mix1_final.pt`)
+  - `body_s0.pt`: `3ddbf7696638862f998f0a1718581bff898ff7ea8efa03b9c5acd13094185f2b`, `body_s1.pt`: `bfadb19c507a76b284c295caa0e50a8ca14a09f562f66b809342a76e1a749dd8`
+  - `body_s2.pt`: `166573be7b3290f06d772f3f627908666a69cf6734a5492cc3192704951e1075`, `body_s3.pt`: `15e296f9d0fe8e2aaac9a3f5708191890a349796e0a62efa87109066676de6a6`
+    (from `.../learning/models/body_silu_final_s{0..3}.pt`, weights copied bit for bit by `learning/export_flumen_analytic.py`)
+- **Recipe and reproducibility metadata:** `stochastic_wl_analytic/learning/models/silu_final_metadata.json` (commands, hyper-parameters, seeds, git commit and dirty flag,
+  library versions, SHA-256 of all code, data and checkpoints); report `learning/PRODUCTION_READINESS_SILU.md`; one-shot test record `learning/results/test_silu_once.json`.
+- **Code:** `model/analytic.py` (port; SiLU conditioner, any number of seeds, optional guard fallback and diagnostics), `evaluation/analytic_numpy_reference.py`
+  (independent NumPy float64 networks), `evaluation/test_analytic.py`; freeze record `model/FREEZE_analytic_silu-final-v1.json`.
+
+
+
+## Analytic model (2026-10-26; internal artifact `mix3-v1`)
+
+Source: stochastic_wl_analytic/learning/models/ctx_mix3.pt and
+body_mix3silu_s0.pt through s7.pt. These are the existing train-only models,
+not the continuation or Sobolev trial checkpoints. All tensors are exported
+bit-for-bit with weights_only-safe metadata by learning/export_mix3_flumen.py.
+Source hashes, split/selection provenance and known limitations are in
+model/checkpoints/analytic_mix3_v1/meta.json; checksums in MANIFEST.sha256.
+Freeze and verification record: model/FREEZE_analytic_mix3-v1.json.
+Original mix1 checkpoints and historical golden regressions are preserved.
+This local promotion does not publish a package release or make a git commit.
+
+Public interface: the model is named `analytic` and is the default for generate_pdf, generate_pdf_lnmu and get_model. Artifact identifiers above are internal provenance; no version selection is needed. Weights are unchanged.

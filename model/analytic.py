@@ -1,25 +1,13 @@
-"""Analytic-chain backend: an emulator of the semi-analytic compound-Poisson (Levy-Khintchine) magnification PDF.
+"""Analytic weak-lensing magnification PDF model.
 
-Trained on 3,903 deterministic PDFs of the analytic chain (stochastic_wl_analytic, draft model: r200 halo edges,
-xi_lin Gaussian clustering, exact moment subhalos, filaments, pseudo-elliptical halos; training resolution "aggr2p"),
-cleaned of Fourier-inversion artifacts before training. Self-contained inference code; the training pipeline lives in
-stochastic_wl_analytic/learning (README sections 6-11).
-
-Native quantity: the SOURCE-plane PDF P_S(ln mu) (random source positions; mu^-2 tail in ln mu). The IMAGE-plane PDF
-(random lines of sight, the quantity of the MC backend) is P_I(ln mu) = mu P_S(ln mu) / <mu>_S.
-
-Pieces (as validated in stochastic_wl_analytic/learning/emulator.py):
-  context   MLP ensemble (5 x 3 x 128) -> m, s (median / robust width of ln mu), y_b (cutoff in widths), ln P at ln mu 4..9
-  body      zuko NSF flow (2 seeds, mixture) for p_U(u), u = ln(y - y_b + DELTA), y = (ln mu - m)/s; context = the 10
-            parameters + the predicted (ln s, m/s, y_b);  P_S(ln mu) = p_U(u) e^-u / s, exactly 0 below the cutoff
-  left      below where the body first drops under EPS_LEFT of its peak: the log-quadratic edge law in t = ln mu - cut
-  tail      beyond ln mu_c = min(max(ln 20, m + 10 s), where the body < P_HANDOVER of its peak): ln P = a - 2 ln mu
-            + b/mu + c/mu^2, a predicted, (b, c) matching the body's value and slope; smoothstep blend of +-BLEND
-  norm      quadrature of the joined density (analytic mu^-2 remainder beyond ln mu = 12)
+Load with load_analytic_model(), or use flumen.generate_pdf() directly.
+The model returns source-plane PDFs by default; plane="image" is optional.
+Artifact identifiers and training/export provenance are internal metadata.
 """
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 
@@ -28,7 +16,19 @@ import torch
 import torch.nn as nn
 import zuko
 
-CKPT_DIR = Path(__file__).resolve().parent / "checkpoints" / "analytic"
+CKPT_ROOT = Path(__file__).resolve().parent / "checkpoints"
+# Released analytic emulator (checkpoint directory under model/checkpoints/):
+#   "silu-final-v2": 8-seed SiLU-conditioner ensemble (seeds 0-7), mix1 data (gauss + vp closures, z_s 0.2-12), train+validation (2026-10-23; default)
+#   "silu-final-v1": its first 4 seeds (0-3), identical weights (2026-10-23)
+ANALYTIC_VERSIONS = {"silu-final-v1": "analytic_silu_v1", "silu-final-v2": "analytic_silu_v2", "mix3-v1": "analytic_mix3_v1", "analytic": "analytic_mix3_v1"}
+DEFAULT_VERSION = "analytic"
+CKPT_DIR = CKPT_ROOT / ANALYTIC_VERSIONS[DEFAULT_VERSION]
+_ACT = {"silu": nn.SiLU}                      # the released conditioner (a ReLU conditioner made d ln P / d ln sigma8 piecewise linear; removed in 0.5.0)
+# Left-guard rise test: a outward rise of the flank counts only if it exceeds the running minimum by RISE_TOL in ln P (0 = the original zero-tolerance test).
+# silu-final-v1 keeps 0 (bit-for-bit as released); silu-final-v2 uses 1e-2: with 8 seeds one member (s5) has a ~4e-3 ripple at the top of the peak, which the
+# zero-tolerance test read as a rise, anchoring the guard at the peak and adding 100-200% mass in ~1.2% of configurations.
+RISE_TOL_BY_CKPT = {"analytic_silu_v1": 0.0, "analytic_silu_v2": 1e-2}
+GUARD_EPS = 1e-3           # |dM| bound of the optional mass-conserving guard fallback (guard="auto")
 
 AXES = ("z_s", "h", "Om", "sigma8", "Ob", "ns", "zeq", "Ok", "w0", "wa")
 BOX = dict(z_s=(0.5, 12.0), h=(0.55, 0.85), Om=(0.15, 0.50), sigma8=(0.40, 1.50), Ob=(0.03, 0.07),
@@ -70,8 +70,11 @@ class _CtxMLP(nn.Module):
 
 
 def _build_flow(cfg):
+    # cfg["act"] = activation of the spline hyper-network (SiLU)
+    if cfg.get("act") not in _ACT:
+        raise ValueError(f"unsupported conditioner activation {cfg.get('act')!r}; this port supports {sorted(_ACT)}")
     return zuko.flows.NSF(features=1, context=cfg.get("n_ctx", 10), transforms=cfg["transforms"],
-                          hidden_features=[cfg["hidden"]] * cfg["depth"], bins=cfg["bins"])
+                          hidden_features=[cfg["hidden"]] * cfg["depth"], bins=cfg["bins"], activation=_ACT[cfg["act"]])
 
 
 def _law_through(lnP_anch):
@@ -100,8 +103,24 @@ class AnalyticPDF:
     Densities are with respect to d ln(mu) unless stated otherwise.
     """
 
-    def __init__(self, device="cpu", ckpt_dir=CKPT_DIR, seeds=(0, 1)):
+    def __init__(self, device="cpu", ckpt_dir=CKPT_DIR, seeds=None, guard="current", guard_eps=GUARD_EPS, rise_tol=None):
+        """``seeds=None``: every ``body_s*.pt`` in ``ckpt_dir`` (the 8-seed production ensemble in the default version). ``guard="current"`` (default): the original left-edge
+        guard; ``guard="auto"``: keep the guard only if it moves less than ``guard_eps`` of the probability mass, else use the flow alone above the cutoff
+        (see :meth:`diagnose`). ``rise_tol=None``: the tolerance of the guard's rise test of the checkpoint version (``RISE_TOL_BY_CKPT``)."""
+        if guard not in ("current", "auto"):
+            raise ValueError("guard must be 'current' or 'auto'")
+        self.guard, self.guard_eps = guard, float(guard_eps)
         self.device = torch.device(device)
+        ckpt_dir = Path(ckpt_dir)
+        self.rise_tol = float(RISE_TOL_BY_CKPT.get(ckpt_dir.name, 0.0) if rise_tol is None else rise_tol)
+        if seeds is None:
+            seeds = sorted(int(f.stem.split("_s")[1]) for f in ckpt_dir.glob("body_s*.pt"))
+        self.seeds = tuple(seeds)
+        meta = ckpt_dir / "meta.json"
+        info = json.loads(meta.read_text())
+        self._artifact_version = info["version"]
+        self.version = "analytic" if self._artifact_version == "mix3-v1" else self._artifact_version
+        self._source_float32 = info.get("mixing_precision") == "source-float32"
         ck = torch.load(Path(ckpt_dir) / "ctx.pt", map_location=self.device, weights_only=True)
         self.names = list(ck["names"])
         self.ctx_nets = []
@@ -137,7 +156,11 @@ class AnalyticPDF:
         C = torch.tensor(Cnp, dtype=torch.float32, device=self.device)
         us = torch.tensor(((np.asarray(u) - self.U0) / self.US)[:, None, None], dtype=torch.float32, device=self.device)
         with torch.no_grad():
-            lp = np.array([f(C).log_prob(us)[:, 0].cpu().numpy() for f in self.flows], dtype=np.float64)
+            lp = np.array([f(C).log_prob(us)[:, 0].cpu().numpy() for f in self.flows], dtype=np.float32 if self._source_float32 else np.float64)
+        if self._source_float32:
+            # Preserve the exact model assessed in stochastic_wl_analytic.
+            with np.errstate(divide="ignore", under="ignore"):
+                return np.log(np.mean(np.exp(lp), axis=0)) - math.log(self.US)
         mx = lp.max(0)
         with np.errstate(invalid="ignore"):
             out = mx + np.log(np.mean(np.exp(lp - mx), axis=0))                    # mixture of the seeds
@@ -155,11 +178,15 @@ class AnalyticPDF:
 
     def _left_guard(self, p, c):
         s, cut = c["s"], c["cut"]
-        x = cut + np.geomspace(1e-4, 1.0, 1200) * (c["m"] + 3 * s - cut)
+        x = (cut + s * np.geomspace(1e-4, 1.0, 1200) * (c["m"] + 3 * s - cut) / s
+             if self._source_float32 else cut + np.geomspace(1e-4, 1.0, 1200) * (c["m"] + 3 * s - cut))
         lp = self._flow_lnP(p, c, x)
         ipk = int(np.argmax(lp)); lpk = lp[ipk]
         left = lp[:ipk + 1][::-1]
-        rise = np.flatnonzero(np.diff(left) > 0)
+        if self.rise_tol > 0:
+            rise = np.flatnonzero(left - np.minimum.accumulate(left) > self.rise_tol)
+        else:
+            rise = np.flatnonzero(np.diff(left) > 0)
         low = np.flatnonzero(left < lpk + math.log(EPS_LEFT))
         k_rise = rise[0] if rise.size else len(left)
         k_low = low[0] if low.size else len(left)
@@ -243,6 +270,57 @@ class AnalyticPDF:
                + np.trapezoid(pt * np.exp(xt), xt) + pt[-1] * np.exp(xt[-1]))   # mu^-2 remainder: P(12) e^12
         return mass, mu1
 
+    def _without_guard(self, p, c):
+        """The same context with the left-edge guard removed (flow alone above the structural cutoff); tail and normalisation recomputed."""
+        c0 = dict(c)
+        c0["left"] = None
+        c0["tail"] = self._tail(p, c0)
+        mass, mu1 = self._moments(p, c0)
+        c0["norm"], c0["mean_mu"] = mass, mu1 / mass
+        return c0
+
+    def diagnose(self, params):
+        """Left-edge-guard diagnostics and failure flags for ``params`` (any ``guard`` mode; does not change the PDF).
+
+        Returns a dict with ``has_guard``, the guard law ``(xE, n, beta)``, ``dM`` = (mass with the guard - mass without) / mass without, ``norm`` and ``flags``:
+        ``guard_mass_shift`` (|dM| > ``guard_eps``: the guard moved probability mass, observed in ~0.1% of configurations and always when the guard is anchored at the
+        peak), ``extreme_law`` (beta > 10 or n < -20; informational, harmless unless combined with a mass shift), ``no_guard``, ``norm_off`` (|norm - 1| > 1e-3)."""
+        p = np.asarray(params, dtype=np.float64)
+        key = tuple(float(v) for v in p)
+        cur = self._cache.pop(key, None)
+        base = AnalyticPDF.prepare(self, params) if self.guard == "current" else self._unguarded_prepare(params)
+        c = base
+        d = dict(has_guard=c["left"] is not None, norm=float(c["norm"]), fallback=False)
+        if c["left"] is None:
+            d.update(dM=0.0, flags=["no_guard"])
+        else:
+            c0 = self._without_guard(p, c)
+            dM = (c["norm"] - c0["norm"]) / c0["norm"]
+            xE, _, n, beta = c["left"]
+            flag = abs(dM) > self.guard_eps
+            d.update(xE=float(xE), n=float(n), beta=float(beta), dM=float(dM), width_guard=float(xE - c["cut"]), norm_without_guard=float(c0["norm"]),
+                     fallback=bool(self.guard == "auto" and flag))                 # whether THIS instance's PDF uses the guard-free branch
+            if d["fallback"]:
+                d["norm"] = float(c0["norm"])
+            d["flags"] = (["guard_mass_shift"] if flag else []) + (["extreme_law"] if beta > 10 or n < -20 else [])
+        if abs(d["norm"] - 1.0) > 1e-3:
+            d["flags"].append("norm_off")
+        if cur is not None:
+            self._cache[key] = cur
+        return d
+
+    def _unguarded_prepare(self, params):
+        """prepare() with the guard kept regardless of ``self.guard`` (used by diagnose in "auto" mode)."""
+        mode, self.guard = self.guard, "current"
+        try:
+            key = tuple(float(v) for v in params)
+            self._cache.pop(key, None)
+            c = self.prepare(params)
+            self._cache.pop(key, None)
+            return c
+        finally:
+            self.guard = mode
+
     # ------------------------------------------------------------ public
     def prepare(self, params):
         key = tuple(float(v) for v in params)
@@ -260,6 +338,12 @@ class AnalyticPDF:
         c["tail"] = self._tail(p, c)
         mass, mu1 = self._moments(p, c)
         c["norm"], c["mean_mu"] = mass, mu1 / mass
+        c["guard_fallback"] = False
+        if self.guard == "auto" and c["left"] is not None:
+            c0 = self._without_guard(p, c)
+            dM = (mass - c0["norm"]) / c0["norm"]
+            if abs(dM) > self.guard_eps:
+                c0["guard_fallback"], c = True, c0
         if len(self._cache) > 256:
             self._cache.pop(next(iter(self._cache)))
         self._cache[key] = c
@@ -296,6 +380,11 @@ class AnalyticPDF:
         return float(self.prepare(params)["mean_mu"])
 
 
-def load_analytic_model(device="cpu"):
-    """Load the analytic-chain emulator (2-seed ensemble, trained on train + validation)."""
-    return AnalyticPDF(device=device)
+def load_analytic_model(device="cpu", version=DEFAULT_VERSION, **kwargs):
+    """Load the analytic PDF model. Defaults need no version selection.
+
+    Additional keyword arguments are passed to AnalyticPDF.
+    """
+    if version not in ANALYTIC_VERSIONS:
+        raise ValueError(f"unknown analytic version {version!r}; available: {sorted(ANALYTIC_VERSIONS)}")
+    return AnalyticPDF(device=device, ckpt_dir=CKPT_ROOT / ANALYTIC_VERSIONS[version], **kwargs)

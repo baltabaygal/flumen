@@ -1,0 +1,39 @@
+{
+ "version": "silu-final-v2",
+ "exported": "2026-10-23 14:09:16",
+ "description": "8-seed SiLU-conditioner NSF body ensemble + ctx MLP ensemble, mix1 data (gauss + vp closures, z_s 0.2-12), trained on train+validation",
+ "source_repo": "stochastic_wl_analytic",
+ "source_git": {
+  "commit": "3ce5e2e96ed1149662bffa7948a22e9329cb7615",
+  "dirty": true,
+  "branch": "fix/lowz-2026-10-19"
+ },
+ "source_sha256": {
+  "ctx_mix1_final.pt": "d0be3a106d83d19283a1d5ef44fdba2cc9b2b2464f4cc401761cef75593c1e0d",
+  "body_silu_final_s0.pt": "ca662356ae95ab99c51441744508114cb7f33f05b0b8bdc4b5679b7b972f9da7",
+  "body_silu_final_s1.pt": "3cd61453b933718ca2f52accea39482dd7fa07ec2e721cfc94dbb1e99402230a",
+  "body_silu_final_s2.pt": "aefcd37f6becb009da228b25ba339937c731f09ea774f2dfd61da350eaac1f5f",
+  "body_silu_final_s3.pt": "546d6ff7b727df95c14bdd4dbb15d61eea6caf738f5bc758cb39a4d94d17d5d8",
+  "body_silu_final_s4.pt": "31fc35a26b703d6a6a22d68f4d5bb31cb4ad7e91ed87a506c090b95ea96fcacd",
+  "body_silu_final_s5.pt": "a364db9ef3d04fc496e0df3a72436bf676fff4c6131fbddd328575a34cb5f619",
+  "body_silu_final_s6.pt": "7d4c565b333e66fe037ebf17d72aafea66fb694cdb96d7b295d278c650d3ab17",
+  "body_silu_final_s7.pt": "5b8c73aca5115fbeedfba499927c023a46eab6219e32f7efa045ec2af5e8f621"
+ },
+ "learning_metadata": [
+  "learning/models/silu_final_metadata.json",
+  "learning/models/silu_final_seeds4_7_metadata.json"
+ ],
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7
+ ],
+ "conditioner_activation": "silu",
+ "test_split": "train-only SiLU ensemble scored once (learning/results/test_silu_once.json); final models never scored against test labels",
+ "limitations": "see learning/PRODUCTION_READINESS_SILU.md"
+}
