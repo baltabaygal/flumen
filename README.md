@@ -60,14 +60,14 @@ If you use this code in your research, please cite:
     year = "2026"
 }
 
-@misc{Baltabay2026cos,
-      title={Cosmological lensing as a jump process},
-      author={Galymzhan Baltabay and Ville Vaskonen},
-      year={2026},
-      eprint={2610.40341},
-      archivePrefix={arXiv},
-      primaryClass={astro-ph.CO},
-      url={https://arxiv.org/abs/2610.40341},
+@article{Baltabay:2026hka,
+    author = "Baltabay, Galymzhan and Vaskonen, Ville",
+    title = "{Cosmological lensing as a jump process}",
+    eprint = "2610.40341",
+    archivePrefix = "arXiv",
+    primaryClass = "astro-ph.CO",
+    month = "10",
+    year = "2026"
 }
 ```
 
