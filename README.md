@@ -45,5 +45,31 @@ The older Monte-Carlo model remains available explicitly:
 mu, pdf = flumen.generate_pdf(z_s=1.0, backend="mc")
 ```
 
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@article{Baltabay:2026nmz,
+    author = "Baltabay, Galymzhan and Vaskonen, Ville",
+    title = "{FLUMEN: Neural Emulator of an Advanced Stochastic Weak Lensing Model}",
+    eprint = "2609.21806",
+    archivePrefix = "arXiv",
+    primaryClass = "astro-ph.CO",
+    month = "9",
+    year = "2026"
+}
+
+@misc{Baltabay2026cos,
+      title={Cosmological lensing as a jump process},
+      author={Galymzhan Baltabay and Ville Vaskonen},
+      year={2026},
+      eprint={2610.40341},
+      archivePrefix={arXiv},
+      primaryClass={astro-ph.CO},
+      url={https://arxiv.org/abs/2610.40341},
+}
+```
+
 MIT license. Model qualifications and provenance are recorded separately in
 `docs/MODEL_CARD.md` and `PROVENANCE.md`.

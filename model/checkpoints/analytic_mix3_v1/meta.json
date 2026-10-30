@@ -44,10 +44,14 @@
     "Line2 low-z N10 errors reach about5% at epsilon=.005 against Gaussian refs; worst-point VP comparison about4.2%.",
     "z_s<.5 depends on r200 halo-edge choice; sparse corner validation errors remain.",
     "Original guard and tail behavior preserved; no hardening or derivative-loss experimental models promoted.",
-    "New model scored on validation/regression references; no new test scoring."
+    "New model scored on validation/regression references; no new test scoring.",
+    "Shipped model uses SiLU conditioners without a derivative-loss term; see planned_updates."
   ],
   "records": [
     "learning/results/mix3_extra_seeds/README.md",
     "learning/results/mix3_sigma8/README.md"
+  ],
+  "planned_updates": [
+    "Derivative-loss (first-derivative penalty) training is planned: the shipped mix3-v1 weights do NOT include it; a derivative-loss retrain will be published as a later FLUMEN update."
   ]
 }
