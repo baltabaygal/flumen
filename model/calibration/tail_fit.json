@@ -91,9 +91,9 @@
     ]
   },
   "datasets": [
-    "/Users/baltabay/Desktop/gw-wl-emulator/production_data",
-    "/Users/baltabay/Desktop/gw-wl-emulator/production_data_lostruct_aug",
-    "/Users/baltabay/Desktop/gw-wl-emulator/production_data_lostruct_aug_r2"
+    "/Users/baltabay/Desktop/done_papers/gw-wl-emulator/production_data",
+    "/Users/baltabay/Desktop/done_papers/gw-wl-emulator/production_data_lostruct_aug",
+    "/Users/baltabay/Desktop/done_papers/gw-wl-emulator/production_data_lostruct_aug_r2"
   ],
   "sim_tag": "c10eca783b41",
   "basis": "tail_features+TAIL_BASIS_NU",
