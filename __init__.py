@@ -11,7 +11,7 @@ import numpy as np
 
 from .model import load_analytic_model, load_model
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __all__ = ["generate_pdf", "generate_pdf_lnmu", "get_model", "TRAINING_RANGE", "ANALYTIC_TRAINING_RANGE",
            "__version__"]
 

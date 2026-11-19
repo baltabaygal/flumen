@@ -25,6 +25,8 @@ tails can be extrapolated. Original guard limitations remain.
 The model is normalized in each requested plane. Finite output grids may
 omit probability mass. It does not impose unit flux on the physical analytic
 model. The optional older Monte-Carlo backend emulates a different calculation.
+Since FLUMEN 0.6.0 that backend includes the halo-filament overlap correction
+(see `PROVENANCE.md`); the analytic model does not include it yet.
 
 Exact weights, export checks, source hashes and training provenance are kept
 in the checkpoint metadata and internal freeze/qualification records.

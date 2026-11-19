@@ -69,6 +69,20 @@ If you use this code in your research, please cite:
     month = "10",
     year = "2026"
 }
+
+@article{Vaskonen:2026ubd,
+    author = "Vaskonen, Ville",
+    title = "{Weak lensing of bright standard sirens: prospects for {\ensuremath{\sigma}}8}",
+    eprint = "2601.06023",
+    archivePrefix = "arXiv",
+    primaryClass = "astro-ph.CO",
+    doi = "10.1093/mnras/stag353",
+    journal = "Mon. Not. Roy. Astron. Soc.",
+    volume = "547",
+    number = "1",
+    pages = "stag353",
+    year = "2026"
+}
 ```
 
 MIT license. Model qualifications and provenance are recorded separately in

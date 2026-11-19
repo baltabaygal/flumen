@@ -1,5 +1,41 @@
 # Provenance: Production Model v3
 
+## MC backend v3.1: halo-filament overlap correction (FLUMEN 0.6.0, installed 2026-11-19)
+
+The MC backend (`backend="mc"`) now ships the v3.1 checkpoint and context fits. They replace the
+v3 files described in sections 1-4 below, which remain in git history (FLUMEN 0.5.0).
+
+- **Physics change**: each filament's density is multiplied by [1 - F(M_f, z)], where F is the mass
+  fraction of a filament already inside halos above 1e7 Msun, from excursion-set walks. F is built per
+  cosmology from a universal walk table G(S_f/dc^2, S_min/dc^2) and rescaled at each z so that the
+  removed filament mass equals the engine's halo fraction f_h. The factor enters both the filament
+  threshold count and the sampled filament convergence. This removes the halo-filament double counting
+  raised by the A&A referee (aa63347-26, point 4).
+- **Training data**: the same v3 designs, seeds and settings as v3 (3,695 / 1,088 / 1,089 configs,
+  40k rays per config, kappa_anchor 0, cons16), regenerated with the corrected engine. With the
+  correction switched off, the engine reproduces the v3 training rows exactly.
+- **Training**: the v3 recipe unchanged (`train_single_body.py --arm margin_d0.05`, seed 0, 8 epochs).
+  The same run on the old data reproduces the v3 weights bit for bit.
+- **Checkpoint**: `model/checkpoints/single_body_gauss.pt`, SHA-256
+  `7644d5fe64b9b8599cb0cb6e767fc01a38d6d04c0c93c23a499421fc7a6074e8` (v3 was `a16f5423...e5a6e5`).
+- **Context fits**: `model/calibration/context_fits.json`, SHA-256
+  `41f050596ccec282d07abfdd6202ec255807961740b19870e4394ea2d4a4f604`. Test-split errors: s median
+  relative 1.01 % (95 %: 2.72 %), m 0.00033, kbar 1.15 %, y_b 0.0170.
+- **Held-out test (1,089 configs, new data)**: ACE KL median 0.00482 (p90 0.00735, max 0.0302),
+  quantile KL median 0.00139, KS median 1.63 % (max 7.90 %), TV median 3.30 % (max 8.47 %),
+  tail slope at mu = 1e3 median -2.00001, max |<1/mu> - 1| = 6.7e-5. The v3 model scored on the
+  same new test set gives ACE KL median 0.0234 and KS median 5.0 %.
+- **Effect at Planck** (source plane): sigma_DL 0.03440 -> 0.03065 at z_s = 1 (-10.9 %) and
+  0.07972 -> 0.07271 at z_s = 3 (-8.8 %). The corrected Monte Carlo itself changes by -10.3 % and -8.0 %.
+- **Not updated**: `evaluation/results/`, `qualification/` and sections 1-4 below describe v3.
+  The analytic backend (default) does not include the correction yet.
+- **Full record**: `flumen_paper/referee_response/production_filF/NOTES.md` (engine patch, G table,
+  data generation, training and evaluation logs).
+
+---
+
+## v3 (FLUMEN up to 0.5.0)
+
 - **Release Date**: 2026-09-14
 - **Model Version**: `3.0.0` (Production Shipped)
 - **Architecture**: Single-body SOSPF normalizing flow with Gaussian base distribution, margin-buffered empty-beam cutoff ($\delta=0.05$, $\epsilon_b=0.02$), and smooth $C^\infty$ asymptotic relaxation bridge ($h = 1.0/s$) to asymptotic $\mu^{-2.0000}$ tail.
