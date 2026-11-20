@@ -18,9 +18,15 @@ import zuko
 
 CKPT_ROOT = Path(__file__).resolve().parent / "checkpoints"
 # Released analytic emulator (checkpoint directory under model/checkpoints/):
-#   "silu-final-v2": 8-seed SiLU-conditioner ensemble (seeds 0-7), mix1 data (gauss + vp closures, z_s 0.2-12), train+validation (2026-10-23; default)
+#   "mix3filF-v1": DEFAULT since 0.7.0 (2026-11-20). mix3 recipe (8-seed SiLU ensemble, gauss + vp closures, z_s 0.2-12,
+#                  train-only) on the training set regenerated with the halo-filament overlap correction (filament
+#                  density x [1 - F(M_f, z)], referee point 4 of A&A aa63347-26).
+#   "mix3-v1":     the default of 0.5.0-0.6.0 (2026-10-26), filaments NOT corrected; kept, selectable by version.
+#   "silu-final-v2": 8-seed SiLU-conditioner ensemble (seeds 0-7), mix1 data (gauss + vp closures, z_s 0.2-12), train+validation (2026-10-23)
 #   "silu-final-v1": its first 4 seeds (0-3), identical weights (2026-10-23)
-ANALYTIC_VERSIONS = {"silu-final-v1": "analytic_silu_v1", "silu-final-v2": "analytic_silu_v2", "mix3-v1": "analytic_mix3_v1", "analytic": "analytic_mix3_v1"}
+ANALYTIC_VERSIONS = {"silu-final-v1": "analytic_silu_v1", "silu-final-v2": "analytic_silu_v2", "mix3-v1": "analytic_mix3_v1",
+                     "mix3filF-v1": "analytic_mix3filF_v1", "analytic": "analytic_mix3filF_v1"}
+DEFAULT_ARTIFACT_VERSION = "mix3filF-v1"     # the artifact behind the "analytic" alias
 DEFAULT_VERSION = "analytic"
 CKPT_DIR = CKPT_ROOT / ANALYTIC_VERSIONS[DEFAULT_VERSION]
 _ACT = {"silu": nn.SiLU}                      # the released conditioner (a ReLU conditioner made d ln P / d ln sigma8 piecewise linear; removed in 0.5.0)
@@ -119,7 +125,7 @@ class AnalyticPDF:
         meta = ckpt_dir / "meta.json"
         info = json.loads(meta.read_text())
         self._artifact_version = info["version"]
-        self.version = "analytic" if self._artifact_version == "mix3-v1" else self._artifact_version
+        self.version = "analytic" if self._artifact_version == DEFAULT_ARTIFACT_VERSION else self._artifact_version
         self._source_float32 = info.get("mixing_precision") == "source-float32"
         ck = torch.load(Path(ckpt_dir) / "ctx.pt", map_location=self.device, weights_only=True)
         self.names = list(ck["names"])

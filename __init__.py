@@ -11,7 +11,7 @@ import numpy as np
 
 from .model import load_analytic_model, load_model
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __all__ = ["generate_pdf", "generate_pdf_lnmu", "get_model", "TRAINING_RANGE", "ANALYTIC_TRAINING_RANGE",
            "__version__"]
 
@@ -28,7 +28,7 @@ MC_TRAINING_RANGE = {
     "zeq": (3300.0, 3500.0),
 }
 
-# Training box of the default mix3 analytic backend (z_s >= 0.2, h to 0.85, curvature and
+# Training box of the default analytic backend (mix3filF-v1; same box as mix3-v1) (z_s >= 0.2, h to 0.85, curvature and
 # CPL dark energy). Its sgl.Cosmology domain also requires w0 + wa < 0 and rho_DE/rho_m(z = 1100) <= 1e-2.
 ANALYTIC_TRAINING_RANGE = {
     "z_s": (0.2, 12.0),

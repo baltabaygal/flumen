@@ -1,0 +1,59 @@
+{
+  "version": "mix3filF-v1",
+  "exported": "2026-11-20T12:35:17+0200",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "description": "mix3 recipe (8-seed SiLU ensemble + ctx, mixed Gaussian/VP targets, 4372 configurations, z_s 0.2-12, train-only, validation checkpoint selection) on the training set regenerated with the halo-filament overlap correction: filament density x [1 - F(M_f, z)], F per cosmology from excursion-set walks, closed to the halo mass fraction (SGL_FILF=1).",
+  "filament_overlap": {
+    "on": true,
+    "G_sha256": "14d407688744d951d06ec48274f1654e4fb17b3fd9ac541f4428abce0ea43f2c"
+  },
+  "mixing_precision": "source-float32",
+  "rise_tol": 0.0,
+  "guard": "current",
+  "source_sha256": {
+    "learning/models/ctx_mix3filF.pt": "44f974072418a2cc535e042bb427059a12d5f1ec490644afba9d5b755b82e939",
+    "learning/models/body_mix3filFsilu_s0.pt": "8a31b142f8134a3fc7691a74d4a3a2afa9e3aa160aba452b50ede87ccd6ca590",
+    "learning/models/body_mix3filFsilu_s1.pt": "8f19daffd290b380870c25a5f456d6f9632509e970f928663ac0b0461d254408",
+    "learning/models/body_mix3filFsilu_s2.pt": "5e27238ba45710d6b36642ccb88295710eb503fe6f409dcbc2c52b775c5366c1",
+    "learning/models/body_mix3filFsilu_s3.pt": "fa2385552b662d143de7ccfae77cd75990fd105afa83fed02d251d3a9baa4650",
+    "learning/models/body_mix3filFsilu_s4.pt": "17154fe65feaf11a39ec3ca7fa655380f8772eca04d4b4e6ee4e7b254c52512a",
+    "learning/models/body_mix3filFsilu_s5.pt": "949fbc678e1974af4716dcc4f095e712a274f994934b94a43fab9e46796b2602",
+    "learning/models/body_mix3filFsilu_s6.pt": "3c362118eb1f2d1e2e3354b21dc464b2ae8544fbac2ab35bedb9c289b03a5ebd",
+    "learning/models/body_mix3filFsilu_s7.pt": "871d5c90c0a5326313a0ea19250cdf32664185e5e4c9adf8a478c3035481c143"
+  },
+  "selected_epochs": {
+    "0": 640,
+    "1": 620,
+    "2": 700,
+    "3": 710,
+    "4": 590,
+    "5": 550,
+    "6": 600,
+    "7": 850
+  },
+  "dataset_sha256": {
+    "body_mix3filF.npz": "77e7fa94a4af4a12dfad41d264d0fbd61411b33f928168c0896503f46d92f795",
+    "assembled_mix3filF.npz": "790b5d8b01b6437f9422eb70f925ac7624695f42b2de1cf3383d25fc9c562673"
+  },
+  "code": "stochastic_wl_analytic 79b3993 (feat/filament-overlap); data training_out/aggr2p_filF (manivald, 2026-11-19/20)",
+  "supersedes": "mix3-v1 (kept in model/checkpoints/analytic_mix3_v1, selectable by version)",
+  "limitations": [
+    "Analytic default filament treatment kept (every filament core counted, no kappa threshold); the MC backend drops sub-threshold filaments, so the two backends respond differently to the fix.",
+    "z_s < 0.5 depends on the r200 halo-edge choice.",
+    "Lower-edge negativity of the Gaussian closure is larger than in mix3 (96 vs 6 configs below -1e-5 of the peak); handled by the assembler's edge cleaning.",
+    "Scored on validation; no test scoring."
+  ],
+  "records": [
+    "stochastic_wl_analytic/tmp/filF/NOTES.md",
+    "learning/run_mix3filF.sh"
+  ]
+}

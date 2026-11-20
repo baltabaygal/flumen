@@ -1,4 +1,4 @@
-"""Frozen mix3 production export: independent source goldens, API and N10."""
+"""Archived mix3-v1 export (the default analytic model of 0.5.0-0.6.0, filaments not corrected), pinned by version since 0.7.0: independent source goldens and N10."""
 import hashlib,json,math
 from pathlib import Path
 import numpy as np
@@ -11,10 +11,10 @@ CKPT=ROOT/'model/checkpoints/analytic_mix3_v1'
 GOLD=json.loads((Path(__file__).parent/'analytic_mix3_goldens.json').read_text())
 
 @pytest.fixture(scope='module')
-def model():return load_analytic_model()
+def model():return load_analytic_model(version='mix3-v1')
 
-def test_mix3_default_and_safe_checkpoint_manifest(model):
-    assert model.version=='analytic' and model.seeds==tuple(range(8))
+def test_mix3_archived_and_safe_checkpoint_manifest(model):
+    assert model.version=='mix3-v1' and model.seeds==tuple(range(8))
     assert model.guard=='current' and model.rise_tol==0.
     meta=json.loads((CKPT/'meta.json').read_text())
     assert meta['mixing_precision']=='source-float32' and len(meta['seeds'])==8
@@ -55,27 +55,3 @@ def test_mix3_sigma8_fisher_source_goldens(model,row):
         q/=np.trapezoid(q,x,axis=1)[:,None];mask=(q>1e-300).all(0)&(q[4]>1e-12)
         g=weights@np.log(q[:,mask]);n10.append(100/np.trapezoid(q[4,mask]*g*g,x[mask]))
     assert np.allclose(n10,row['source_N10'],rtol=2e-5,atol=0)
-
-def test_mix3_public_api_low_z_without_extrapolation_warning(model):
-    import warnings
-    p=[.2,.674,.315,.811,.0493,.965,3402.,0.,-1.,0.]
-    x=np.linspace(-.02,.08,200)
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter('always');xx,pdf=flumen.generate_pdf_lnmu(z_s=.2,lnmu=x,backend='analytic')
-    assert not any('outside the confirmed training range' in str(w.message) for w in recorded)
-    assert np.array_equal(xx,x) and np.allclose(pdf,model.pdf_lnmu(x,p))
-    assert flumen.ANALYTIC_TRAINING_RANGE['z_s']==(.2,12.)
-
-
-def test_public_default_is_analytic(model):
-    assert flumen.get_model().version == 'analytic'
-    assert flumen.TRAINING_RANGE is flumen.ANALYTIC_TRAINING_RANGE
-    x=np.linspace(-.08,.3,250)
-    _,default=flumen.generate_pdf_lnmu(z_s=1.,lnmu=x)
-    _,explicit=flumen.generate_pdf_lnmu(z_s=1.,lnmu=x,backend='analytic')
-    assert np.array_equal(default,explicit)
-    mu=np.exp(x)
-    _,default_mu=flumen.generate_pdf(z_s=1.,mu=mu)
-    assert np.allclose(default_mu,default/mu,rtol=1e-5,atol=1e-10)
-    _,de=flumen.generate_pdf_lnmu(z_s=1.,lnmu=x,Ok=-.02,w0=-.9,wa=-.1)
-    assert np.isfinite(de).all() and not np.allclose(default,de)
