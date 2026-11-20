@@ -1,0 +1,108 @@
+{
+  "identifier": "mix3filF-v1+9ac404b5c673",
+  "model_version": "mix3filF-v1",
+  "frozen": "2026-11-20T13:38:50+0200",
+  "decision": "User asked (2026-11-20) to make the filament-corrected analytic model the default backend and to keep the old analytic model (mix3-v1) archived and selectable.",
+  "local_promotion": true,
+  "published": false,
+  "committed": true,
+  "default_guard": "current",
+  "rise_tolerance": 0.0,
+  "mixing_precision": "source-float32",
+  "source": {
+    "repo": "stochastic_wl_analytic",
+    "commit": "79b3993 (feat/filament-overlap) + learning/ scripts of 2026-11-20",
+    "sha256": {
+      "learning/models/ctx_mix3filF.pt": "44f974072418a2cc535e042bb427059a12d5f1ec490644afba9d5b755b82e939",
+      "learning/models/body_mix3filFsilu_s0.pt": "8a31b142f8134a3fc7691a74d4a3a2afa9e3aa160aba452b50ede87ccd6ca590",
+      "learning/models/body_mix3filFsilu_s1.pt": "8f19daffd290b380870c25a5f456d6f9632509e970f928663ac0b0461d254408",
+      "learning/models/body_mix3filFsilu_s2.pt": "5e27238ba45710d6b36642ccb88295710eb503fe6f409dcbc2c52b775c5366c1",
+      "learning/models/body_mix3filFsilu_s3.pt": "fa2385552b662d143de7ccfae77cd75990fd105afa83fed02d251d3a9baa4650",
+      "learning/models/body_mix3filFsilu_s4.pt": "17154fe65feaf11a39ec3ca7fa655380f8772eca04d4b4e6ee4e7b254c52512a",
+      "learning/models/body_mix3filFsilu_s5.pt": "949fbc678e1974af4716dcc4f095e712a274f994934b94a43fab9e46796b2602",
+      "learning/models/body_mix3filFsilu_s6.pt": "3c362118eb1f2d1e2e3354b21dc464b2ae8544fbac2ab35bedb9c289b03a5ebd",
+      "learning/models/body_mix3filFsilu_s7.pt": "871d5c90c0a5326313a0ea19250cdf32664185e5e4c9adf8a478c3035481c143"
+    },
+    "dataset_sha256": {
+      "body_mix3filF.npz": "77e7fa94a4af4a12dfad41d264d0fbd61411b33f928168c0896503f46d92f795",
+      "assembled_mix3filF.npz": "790b5d8b01b6437f9422eb70f925ac7624695f42b2de1cf3383d25fc9c562673"
+    },
+    "filament_overlap": {
+      "on": true,
+      "G_sha256": "14d407688744d951d06ec48274f1654e4fb17b3fd9ac541f4428abce0ea43f2c"
+    }
+  },
+  "checkpoints": {
+    "MANIFEST.sha256": "9ac404b5c673e10509c074d029485d194399d7ed3688323938215d3dae660965",
+    "body_s0.pt": "f8af67bfb09745cf15ffa1c3293549d821496f419dc5eac5acd1b16272d75df7",
+    "body_s1.pt": "064821cd526b9a8c74313d2defde83b49ae3bdf8ed1533a357e30ff2f6d4d3e8",
+    "body_s2.pt": "9468bd754df54daa075ce4c789fa826e209fb8910d6b33747ff9e2ecbb0d71b0",
+    "body_s3.pt": "d83188ea0948b4733be0211ab97773fe1fb081a05b54b8f327a8da7c27b831d0",
+    "body_s4.pt": "5b74a93a7452d5c8eb80d787c7ebed69682e89c1789e74f48dafa5d55dea8568",
+    "body_s5.pt": "d2f46a0bbd1a6d46ea3963951ccd306f4c8b7a3da50c87d37b14961d20e3b740",
+    "body_s6.pt": "f5ceb2c593ef72bca99c496d6f59626fa7989391e29571f96082b4b63e5f8085",
+    "body_s7.pt": "9d25ea7b05564d0ef4a9ca0eae0cada84cb7223ffe52e39f3c09b4032ffd5939",
+    "ctx.pt": "995d0e675708940476ff3a9893106710a4ddac9a634900c61936c80c50ca23d3",
+    "meta.json": "f3978e44bb83727b06e79c7b04d66f2d6a5db8238c7c96ad932c9bc182928be2"
+  },
+  "code_sha256": {
+    "model/analytic.py": "749be5b1312b6822c2a95ea1bec3af3a74d4ec7e96844dbfc84beab3e948d3ec",
+    "__init__.py": "a4a9cb1138a188af54dbd3e03c88ed218c85c2083c96d427757daae9fe048812",
+    "evaluation/test_analytic.py": "97ff45f39bd42627260c0846995808f13ddb258fe5b5ffd6209406dbb1690cc2",
+    "evaluation/test_analytic_mix3.py": "1d5d400321b6244bd493f961a5a4e95e37a2c0b352051d75c137302e96536bf5",
+    "evaluation/test_analytic_mix3filF.py": "f67602184c8ddea6aa58e86136d27e72d5ca379f746744ee9f8f6b6e06c51ed8",
+    "evaluation/analytic_mix3filF_goldens.json": "379e6a939ccfa73b002b13e2bea16b13a36d7cd4a897a36083181438d14ec93c",
+    "pyproject.toml": "dc14634a90a6a576847d031bd6dd7ff494446c5337d34fd70074c619e7869673"
+  },
+  "verification": {
+    "report": "qualification/analytic_mix3filF_export_verification.json",
+    "n_pdf": 120,
+    "max_pdf_error_over_peak": 3.7512604083269127e-16,
+    "max_log_density_error": 1.7763568394002505e-15,
+    "max_normalization_relative_error": 2.220446049250313e-16,
+    "max_N10_relative_error": 6.325495682801829e-12,
+    "pytest": "87 passed (evaluation/)"
+  },
+  "validation_vs_own_targets": {
+    "new": {
+      "n": 1087,
+      "KL_med": 1.3182576725385005e-05,
+      "KL_p95": 0.000283704359660943,
+      "KL_max": 0.042609963779254335,
+      "ME_med": 0.005181252143756442,
+      "ME_p95": 0.027877198288587486,
+      "ME_max": 0.4577210557746513,
+      "dvar_abs_p95": 0.016969169126515273,
+      "tail2_5_95": [
+        0.9353217835552032,
+        1.0403816853179868
+      ]
+    },
+    "mix3_v1": {
+      "n": 1087,
+      "KL_med": 4.4955386615761755e-06,
+      "KL_p95": 0.00010513238993087217,
+      "KL_max": 0.01640032311392167,
+      "ME_med": 0.0029549401941336415,
+      "ME_p95": 0.016102620859902127,
+      "ME_max": 0.2639940389366301,
+      "dvar_abs_p95": 0.012337397920587235,
+      "tail2_5_95": [
+        0.9618486519416217,
+        1.03283734484822
+      ]
+    },
+    "report": "stochastic_wl_analytic/learning/results/mix3filF_eval_validation.json"
+  },
+  "training": "mix3 recipe on the regenerated (filament-corrected) set; train-only, validation checkpoint selection; no test scoring.",
+  "limitations": [
+    "Analytic default filament treatment kept (every filament core counted, no kappa threshold); the MC backend drops sub-threshold filaments, so the two backends respond differently to the fix.",
+    "z_s < 0.5 depends on the r200 halo-edge choice.",
+    "Lower-edge negativity of the Gaussian closure is larger than in mix3 (96 vs 6 configs below -1e-5 of the peak); handled by the assembler's edge cleaning.",
+    "Scored on validation; no test scoring.",
+    "Validation errors about 1.8x those of mix3-v1 against its own targets; largest at z_s < 0.4."
+  ],
+  "public_model_name": "analytic",
+  "default_backend": "analytic",
+  "supersedes": "mix3-v1 (model/checkpoints/analytic_mix3_v1, unchanged)"
+}

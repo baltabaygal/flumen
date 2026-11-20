@@ -45,6 +45,19 @@ The older Monte-Carlo model remains available explicitly:
 mu, pdf = flumen.generate_pdf(z_s=1.0, backend="mc")
 ```
 
+Since 0.7.0 both models include the halo-filament overlap correction (each
+filament's density is reduced by the fraction of its mass already in halos).
+The previous analytic model, without the correction, is kept:
+
+```python
+from flumen.model import load_analytic_model
+
+old = load_analytic_model(version="mix3-v1")
+pdf_lnmu = old.pdf_lnmu(lnmu, (1.0, 0.674, 0.315, 0.811, 0.0493, 0.965, 3402.0, 0.0, -1.0, 0.0))
+```
+
+The parameter order is `(z_s, h, Om, sigma8, Ob, ns, zeq, Ok, w0, wa)`.
+
 ## Citation
 
 If you use this code in your research, please cite:

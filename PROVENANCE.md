@@ -1,5 +1,36 @@
 # Provenance: Production Model v3
 
+## Analytic backend mix3filF-v1: halo-filament overlap correction (FLUMEN 0.7.0, installed 2026-11-20)
+
+The default analytic backend (`backend="analytic"`, artifact `mix3filF-v1`, `model/checkpoints/analytic_mix3filF_v1/`)
+replaces `mix3-v1` as the default. `mix3-v1` is kept unchanged in `model/checkpoints/analytic_mix3_v1/` and loads with
+`load_analytic_model(version="mix3-v1")`; its tests are pinned to that version (`evaluation/test_analytic_mix3.py`).
+
+- **Physics change**: the same correction as the MC backend v3.1 below, ported to the semi-analytic chain
+  (`stochastic_wl_analytic` commit 79b3993, `analytic/filament_overlap.py`, switch `SGL_FILF=1`). F is built per
+  cosmology from the same walk table G (SHA-256 `14d40768...3f2c`) and closed per z to the chain's own halo
+  fraction. The analytic chain keeps its filament treatment (every filament counted, no convergence threshold).
+  In the engine's threshold mode the port reproduces the MC change of sigma_DL at Planck (-10.34 / -7.88 % vs MC
+  -10.28 / -8.04 % at z_s = 1 / 3); in the default treatment the change is -13.9 / -12.0 %.
+- **Training data**: the 4,372 mix3 configurations (3,826 Gaussian + 546 VP closure; same design, setting aggr2p,
+  splits 2,197 / 1,087 / 1,088) regenerated with the correction on the KBFI cluster (2026-11-19/20). Every
+  config records the correction; with it off the cluster code reproduces the stored mix3 configs to 1e-12 of the
+  peak. Assembled with the mix3 settings (`learning/assemble.py --tag mix3filF`).
+- **Training**: the mix3 recipe unchanged (`learning/run_mix3filF.sh`: ctx `--anchors all`, SiLU body, seeds 0-7,
+  train-only, validation checkpoint selection).
+- **Export check**: `learning/verify_mix3filF_flumen.py --installed`: the installed model equals the training-side
+  emulator to 3.8e-16 of the peak (120 validation PDFs) and 6.3e-12 in N10; goldens in
+  `evaluation/analytic_mix3filF_goldens.json` come from the training side. Record:
+  `model/FREEZE_analytic_mix3filF-v1.json`, `qualification/analytic_mix3filF_export_verification.json`.
+- **Validation accuracy** (each model against its own chain targets, 1,087 configs): median max error 0.52 % of
+  the peak (mix3-v1: 0.30 %), 95th percentile 2.8 % (1.6 %), median KL 1.3e-5 (4.5e-6). Largest errors at
+  z_s < 0.4 (narrow VP peaks, up to 46 % of the peak). No test-split scoring. Low-z N10 not re-checked.
+- **Effect at Planck** (source plane): peak of P(ln mu) 8.4 -> 12.4 (z_s = 1), 3.07 -> 3.85 (z_s = 3); width of
+  ln mu (|ln mu| <= 1) 0.067 -> 0.058 and 0.161 -> 0.142.
+- **Full record**: `stochastic_wl_analytic/tmp/filF/NOTES.md`.
+
+---
+
 ## MC backend v3.1: halo-filament overlap correction (FLUMEN 0.6.0, installed 2026-11-19)
 
 The MC backend (`backend="mc"`) now ships the v3.1 checkpoint and context fits. They replace the
@@ -134,4 +165,4 @@ Freeze and verification record: model/FREEZE_analytic_mix3-v1.json.
 Original mix1 checkpoints and historical golden regressions are preserved.
 This local promotion does not publish a package release or make a git commit.
 
-Public interface: the model is named `analytic` and is the default for generate_pdf, generate_pdf_lnmu and get_model. Artifact identifiers above are internal provenance; no version selection is needed. Weights are unchanged.
+Superseded as the default in 0.7.0 by `mix3filF-v1` (see the top of this file); still loadable with `load_analytic_model(version="mix3-v1")`. Until 0.6.0: the model is named `analytic` and is the default for generate_pdf, generate_pdf_lnmu and get_model. Artifact identifiers above are internal provenance; no version selection is needed. Weights are unchanged.
